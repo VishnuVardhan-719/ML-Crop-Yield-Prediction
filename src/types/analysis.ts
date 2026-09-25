@@ -26,6 +26,9 @@ export type ModelEvaluation = {
   selected: boolean
   parameters: string[]
   crossValidation: string
+  holdoutR2?: number
+  holdoutMae?: number
+  holdoutRmse?: number
 }
 
 export type AnalysisReport = {

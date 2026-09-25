@@ -36,10 +36,38 @@ def test_analysis_returns_a_real_report_for_one_numeric_target():
     report = response.json()
     assert report["source"] == "uploaded"
     assert report["dataset"]["target"] == "yield"
-    assert len(report["models"]) == 3
+    assert len(report["models"]) == 4
     assert sum(model["selected"] for model in report["models"]) == 1
+    assert {model["model"] for model in report["models"]} == {"ridge", "lasso", "elastic-net", "random-forest"}
+    assert all(model["holdoutRmse"] is not None for model in report["models"])
+    assert any("only 8 usable target rows" in caveat for caveat in report["caveats"])
     assert report["prediction"]["actualVsPredicted"]
     assert any(column["id"] == "rainfall" and column["eligibleAsFeature"] for column in report["inputColumns"])
+
+
+def test_prediction_with_random_forest_works_end_to_end():
+    inspected = upload("/datasets", SINGLE_TARGET_CSV)
+
+    assert inspected.status_code == 200
+    dataset = inspected.json()
+
+    prediction = client.post("/predictions", json={
+        "datasetId": dataset["datasetId"],
+        "targetColumnId": "yield",
+        "featureColumnIds": ["rainfall", "temperature", "soil"],
+        "model": "random-forest",
+        "inputRecord": {"rainfall": 950, "temperature": 27, "soil": "loam"},
+    })
+    assert prediction.status_code == 200
+    prediction_data = prediction.json()
+    assert prediction_data["model"] == "random-forest"
+    assert isinstance(prediction_data["value"], float)
+
+    explanation = client.post("/explanations", json={"predictionId": prediction_data["predictionId"], "language": "en"})
+    assert explanation.status_code == 200
+    text = explanation.json()["text"]
+    assert "Random Forest" in text
+    assert any(name in text for name in ("rainfall", "temperature", "soil"))
 
 
 def test_analysis_requests_target_selection_when_multiple_numeric_targets_exist():

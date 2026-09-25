@@ -10,11 +10,13 @@ import zipfile
 import numpy as np
 import pandas as pd
 from fastapi import HTTPException, UploadFile
+from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import ElasticNet, Lasso, Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, cross_val_predict, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -25,7 +27,10 @@ MODEL_DEFINITIONS = (
     ("ridge", "Ridge", Ridge(alpha=1.0), ["alpha = 1.0"]),
     ("lasso", "Lasso", Lasso(alpha=0.05, max_iter=10_000), ["alpha = 0.05"]),
     ("elastic-net", "Elastic Net", ElasticNet(alpha=0.08, l1_ratio=0.4, max_iter=10_000), ["alpha = 0.08", "l1_ratio = 0.4"]),
+    ("random-forest", "Random Forest", RandomForestRegressor(n_estimators=300, random_state=42), ["n_estimators = 300", "random_state = 42"]),
 )
+
+MIN_HELDOUT_ROWS = 20
 
 
 @dataclass
@@ -154,7 +159,7 @@ def make_pipeline(frame: pd.DataFrame, features: list[str], estimator: Any) -> P
         transformers.append(("numeric", Pipeline([("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]), numeric))
     if categorical:
         transformers.append(("categorical", Pipeline([("imputer", SimpleImputer(strategy="most_frequent")), ("encoder", OneHotEncoder(handle_unknown="ignore"))]), categorical))
-    return Pipeline([("preprocessor", ColumnTransformer(transformers)), ("model", estimator)])
+    return Pipeline([("preprocessor", ColumnTransformer(transformers)), ("model", clone(estimator))])
 
 
 def fit_models(record: DatasetRecord, target: str, features: list[str]) -> tuple[list[dict[str, Any]], Pipeline, np.ndarray, np.ndarray]:
@@ -165,14 +170,18 @@ def fit_models(record: DatasetRecord, target: str, features: list[str]) -> tuple
     if len(y) < 8:
         raise fail("The selected target needs at least 8 numeric values.")
     x_train, x_test, y_train, y_test = train_test_split(frame, y, test_size=0.25, random_state=42)
+    folds = min(5, max(2, len(y_train) // 4))
+    kfold = KFold(n_splits=folds, shuffle=True, random_state=42)
     evaluations: list[dict[str, Any]] = []
     fitted: list[Pipeline] = []
     for kind, label, estimator, parameters in MODEL_DEFINITIONS:
-        pipeline = make_pipeline(record.frame, features, estimator)
-        pipeline.fit(x_train, y_train)
-        prediction = pipeline.predict(x_test)
-        evaluations.append({"model": kind, "label": label, "r2": safe_number(r2_score(y_test, prediction)), "mae": safe_number(mean_absolute_error(y_test, prediction)), "rmse": safe_number(mean_squared_error(y_test, prediction) ** 0.5), "selected": False, "parameters": parameters, "crossValidation": "Holdout evaluation (25%, random state 42)"})
-        fitted.append(pipeline)
+        holdout_pipeline = make_pipeline(record.frame, features, estimator)
+        holdout_pipeline.fit(x_train, y_train)
+        holdout_prediction = holdout_pipeline.predict(x_test)
+        cv_pipeline = make_pipeline(record.frame, features, estimator)
+        cv_prediction = cross_val_predict(cv_pipeline, frame, y, cv=kfold)
+        evaluations.append({"model": kind, "label": label, "r2": safe_number(r2_score(y, cv_prediction)), "mae": safe_number(mean_absolute_error(y, cv_prediction)), "rmse": safe_number(mean_squared_error(y, cv_prediction) ** 0.5), "selected": False, "parameters": parameters, "crossValidation": f"{folds}-fold cross-validation (random state 42)", "_holdout_r2": safe_number(r2_score(y_test, holdout_prediction)), "_holdout_mae": safe_number(mean_absolute_error(y_test, holdout_prediction)), "_holdout_rmse": safe_number(mean_squared_error(y_test, holdout_prediction) ** 0.5)})
+        fitted.append(holdout_pipeline)
     winner = min(range(len(evaluations)), key=lambda index: evaluations[index]["rmse"])
     evaluations[winner]["selected"] = True
     final_pipeline = make_pipeline(record.frame, features, MODEL_DEFINITIONS[winner][2]).fit(frame, y)
@@ -186,6 +195,9 @@ def build_report(record: DatasetRecord, target: str) -> dict[str, Any]:
     features = usable_features(record.frame, target)
     evaluations, pipeline, actual, predicted = fit_models(record, target, features)
     target_values = pd.to_numeric(record.frame[target], errors="coerce").dropna()
+    caveats_extra: list[str] = []
+    if len(target_values) < MIN_HELDOUT_ROWS:
+        caveats_extra.append(f"This dataset has only {len(target_values)} usable target rows; held-out metrics are indicative, not reliable.")
     numeric = [column for column in features if pd.api.types.is_numeric_dtype(record.frame[column])]
     categorical = [column for column in features if column not in numeric]
     coefficients = feature_insights(pipeline, target)
@@ -201,13 +213,21 @@ def build_report(record: DatasetRecord, target: str) -> dict[str, Any]:
         "dataset": {"fileName": record.file_name, "fileSize": record.file_size, "fileType": record.file_type, "detectedFiles": record.detected_files, "rows": len(record.frame), "columns": len(record.frame.columns), "numericFeatures": len(numeric), "categoricalFeatures": len(categorical), "target": target},
         "quality": quality_checks(record.frame),
         "profile": {"targetSummary": [{"label": f"{edges[index]:.2f}–{edges[index + 1]:.2f}", "value": int(count)} for index, count in enumerate(counts)], "correlations": correlations, "numericSummary": numeric_summary(record.frame, numeric), "categoricalSummary": categorical_summary(record.frame, categorical)},
-        "preprocessing": [{"label": "Identifiers excluded", "detail": "Identifier-like columns were excluded from model features."}, {"label": "Missing values handled", "detail": "Numeric medians and categorical modes are learned in each training split."}, {"label": "Categorical variables encoded", "detail": "Unknown-safe one-hot encoding is applied inside each model pipeline."}, {"label": "Numerical features scaled", "detail": "Standard scaling is applied inside each model pipeline."}, {"label": "Holdout evaluation used", "detail": "A deterministic 75/25 train-test split compares all three models."}],
-        "models": evaluations,
+        "preprocessing": [{"label": "Identifiers excluded", "detail": "Identifier-like columns were excluded from model features."}, {"label": "Missing values handled", "detail": "Numeric medians and categorical modes are learned in each training split."}, {"label": "Categorical variables encoded", "detail": "Unknown-safe one-hot encoding is applied inside each model pipeline."}, {"label": "Numerical features scaled", "detail": "Standard scaling is applied inside each model pipeline."}, {"label": "Cross-validated evaluation used", "detail": "K-fold cross-validation compares all four models, alongside a 75/25 holdout split."}],
+        "models": rename_holdout_metrics(evaluations),
         "prediction": {"label": "Representative predicted yield", "value": safe_number(headline), "unit": "t/ha" if "yield" in target.lower() else None, "actualVsPredicted": [{"actual": safe_number(a), "predicted": safe_number(p)} for a, p in zip(actual[:12], predicted[:12])], "residuals": [safe_number(a - p) for a, p in zip(actual[:12], predicted[:12])]},
         "insights": coefficients,
         "explanations": explanations(evaluations[winner_index(evaluations)]["label"], target, coefficients),
-        "caveats": ["Results are fitted only to this uploaded dataset; they are not a pre-trained regional crop-yield model.", "The headline estimate uses median numeric values and modal categorical values from the uploaded data.", "Model associations and coefficients do not establish causal effects.", "Small, biased, or out-of-range datasets can produce unreliable estimates."],
+        "caveats": ["Results are fitted only to this uploaded dataset; they are not a pre-trained regional crop-yield model.", "The headline estimate uses median numeric values and modal categorical values from the uploaded data.", "Model associations and coefficients do not establish causal effects.", "Small, biased, or out-of-range datasets can produce unreliable estimates.", *caveats_extra],
     }
+
+
+def rename_holdout_metrics(evaluations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for evaluation in evaluations:
+        evaluation["holdoutR2"] = evaluation.pop("_holdout_r2")
+        evaluation["holdoutMae"] = evaluation.pop("_holdout_mae")
+        evaluation["holdoutRmse"] = evaluation.pop("_holdout_rmse")
+    return evaluations
 
 
 def winner_index(evaluations: list[dict[str, Any]]) -> int:
@@ -236,7 +256,12 @@ def categorical_summary(frame: pd.DataFrame, columns: list[str]) -> list[dict[st
 
 def feature_insights(pipeline: Pipeline, target: str) -> list[dict[str, Any]]:
     names = pipeline.named_steps["preprocessor"].get_feature_names_out()
-    coefficients = np.ravel(pipeline.named_steps["model"].coef_)
+    model = pipeline.named_steps["model"]
+    if hasattr(model, "feature_importances_"):
+        importances = np.ravel(model.feature_importances_)
+        ranked = sorted(zip(names, importances), key=lambda item: abs(item[1]), reverse=True)[:5]
+        return [{"feature": name.replace("numeric__", "").replace("categorical__", ""), "coefficient": safe_number(value), "interpretation": f"This feature contributed most to reducing prediction error for {target} within this dataset; importance is not directional."} for name, value in ranked]
+    coefficients = np.ravel(model.coef_)
     ranked = sorted(zip(names, coefficients), key=lambda item: abs(item[1]), reverse=True)[:5]
     return [{"feature": name.replace("numeric__", "").replace("categorical__", ""), "coefficient": safe_number(value), "interpretation": f"A higher encoded value is associated with {'higher' if value >= 0 else 'lower'} predicted {target} within this dataset."} for name, value in ranked]
 

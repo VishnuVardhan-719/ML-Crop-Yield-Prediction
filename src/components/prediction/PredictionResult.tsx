@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { DataSource, PredictionResponse, PredictionStatus } from '../../types/cropcast'
+import type { DataSource, ModelKind, PredictionResponse, PredictionStatus } from '../../types/cropcast'
 
 type PredictionResultProps = {
   status: PredictionStatus
@@ -8,6 +8,13 @@ type PredictionResultProps = {
   source?: DataSource
   targetLabel?: string
   onRetry: () => void
+}
+
+const modelLabels: Record<ModelKind, string> = {
+  ridge: 'Ridge',
+  lasso: 'Lasso',
+  'elastic-net': 'Elastic Net',
+  'random-forest': 'Random Forest',
 }
 
 export function PredictionResult({ status, result, message, source, targetLabel, onRetry }: PredictionResultProps) {
@@ -29,7 +36,7 @@ export function PredictionResult({ status, result, message, source, targetLabel,
       <h3 ref={headingRef} tabIndex={-1}>Prediction result</h3>
       <p className="result-target">{targetLabel ?? result.targetColumnId}</p>
       <div className="result-value">{result.value === null ? 'No value returned' : String(result.value)}{result.unit && <small>{result.unit}</small>}</div>
-      <p className="result-model">Model: {result.model === 'elastic-net' ? 'Elastic Net' : result.model[0].toUpperCase() + result.model.slice(1)}</p>
+      <p className="result-model">Model: {modelLabels[result.model] ?? result.model}</p>
       {result.notices?.length ? <ul className="result-notices">{result.notices.map((notice) => <li key={notice}>{notice}</li>)}</ul> : null}
     </div>
   )

@@ -7,7 +7,7 @@ CropCast is a local, end-to-end crop-yield analysis app. Upload a field dataset 
 - Accepts **CSV**, **XLSX**, and ZIP archives containing **exactly one CSV**.
 - Enforces a **10 MB** upload limit in the browser and again on the server.
 - Detects crop-output targets with names such as `yield` and `production`.
-- Uses a deterministic 75/25 train-test split to compare Ridge, Lasso, and Elastic Net.
+- Compares **Ridge, Lasso, Elastic Net, and Random Forest** using k-fold cross-validation, with a 75/25 holdout split reported alongside.
 - Imputes missing values and applies unknown-safe categorical encoding inside each model pipeline.
 - Provides interactive API docs at `http://localhost:8000/docs`.
 
@@ -71,6 +71,8 @@ npm run test:api
 ## Dataset guidance
 
 Provide at least eight rows and two columns. The selected target must have at least eight numeric values. Identifier-like fields are excluded from model features. Useful feature columns include rainfall, temperature, soil properties, irrigation status, area, and fertilizer.
+
+A ready-to-use example lives at `public/sample-datasets/sample-field-trials.csv` (280 rows: rainfall, temperature, soil, irrigation, and fertilizer predicting yield). You can also download it directly from the analysis page with the **Download sample dataset** link. Aim for roughly 100+ rows for stable held-out metrics; with fewer than 20 usable target rows the report flags that metrics are indicative only.
 
 ## Limitations
 

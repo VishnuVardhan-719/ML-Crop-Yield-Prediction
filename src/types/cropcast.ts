@@ -3,7 +3,7 @@ export type PredictionStatus = 'ready' | 'processing' | 'success' | 'error'
 export type ExplanationStatus = 'loading' | 'success' | 'error'
 export type VoiceStatus = 'idle' | 'playing' | 'paused' | 'stopped' | 'unavailable'
 export type Language = 'en' | 'hi' | 'te'
-export type ModelKind = 'ridge' | 'lasso' | 'elastic-net'
+export type ModelKind = 'ridge' | 'lasso' | 'elastic-net' | 'random-forest'
 export type Scalar = string | number | boolean | null
 export type DataSource = 'uploaded' | 'demo'
 

@@ -8,7 +8,7 @@ from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .analysis import DatasetRecord, MODEL_DEFINITIONS, build_report, candidate_targets, column_descriptor, explanations, fail, make_pipeline, read_dataset, usable_features
+from .analysis import DatasetRecord, MODEL_DEFINITIONS, build_report, candidate_targets, column_descriptor, explanations, fail, feature_insights, make_pipeline, read_dataset, usable_features
 
 
 app = FastAPI(title="CropCast API", version="0.1.0", description="Local tabular regression service for CropCast.")
@@ -26,7 +26,7 @@ class PredictionRequest(BaseModel):
     datasetId: str
     targetColumnId: str
     featureColumnIds: list[str]
-    model: Literal["ridge", "lasso", "elastic-net"]
+    model: Literal["ridge", "lasso", "elastic-net", "random-forest"]
     inputRecord: dict[str, Any]
 
 
@@ -86,7 +86,7 @@ def predict(request: PredictionRequest):
     pipeline = make_pipeline(record.frame, features, estimator).fit(record.frame.loc[valid, features], target.loc[valid])
     value = float(pipeline.predict(pd.DataFrame([request.inputRecord], columns=features))[0])
     prediction_id = uuid4().hex
-    predictions[prediction_id] = {"model": request.model, "target": request.targetColumnId, "value": value}
+    predictions[prediction_id] = {"model": request.model, "target": request.targetColumnId, "value": value, "features": feature_insights(pipeline, request.targetColumnId)}
     response: dict[str, Any] = {"predictionId": prediction_id, "targetColumnId": request.targetColumnId, "value": round(value, 4), "model": request.model}
     if "yield" in request.targetColumnId.lower():
         response["unit"] = "t/ha"
@@ -98,6 +98,6 @@ def explain(request: ExplanationRequest):
     prediction = predictions.get(request.predictionId)
     if not prediction:
         raise fail("This prediction is no longer available.", 404)
-    model = {"ridge": "Ridge", "lasso": "Lasso", "elastic-net": "Elastic Net"}[prediction["model"]]
-    text = explanations(model, prediction["target"], [])[request.language]
+    model = {"ridge": "Ridge", "lasso": "Lasso", "elastic-net": "Elastic Net", "random-forest": "Random Forest"}[prediction["model"]]
+    text = explanations(model, prediction["target"], prediction["features"])[request.language]
     return {"predictionId": request.predictionId, "language": request.language, "text": text}

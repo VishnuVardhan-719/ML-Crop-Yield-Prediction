@@ -59,6 +59,7 @@ export function FileDropzone({ status, message, onFile, onInvalid, onDemo }: Fil
       {(status === 'invalid' || status === 'error') && message && <p className="inline-alert" role="alert">{message}</p>}
       <div className="sample-action">
         <span>No dataset ready?</span>
+        <a className="text-button" href="/sample-datasets/sample-field-trials.csv" download>Download sample dataset</a>
         <button type="button" className="text-button" disabled={busy} onClick={onDemo}>Run demo analysis</button>
       </div>
     </div>

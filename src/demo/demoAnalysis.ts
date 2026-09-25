@@ -9,6 +9,7 @@ export const analysisStages: AnalysisStage[] = [
   { id: 'ridge', label: 'Ridge trained and validated', status: 'pending' },
   { id: 'lasso', label: 'Lasso trained and validated', status: 'pending' },
   { id: 'elastic-net', label: 'Elastic Net trained and validated', status: 'pending' },
+  { id: 'random-forest', label: 'Random Forest trained and validated', status: 'pending' },
   { id: 'compare', label: 'Model performance compared', status: 'pending' },
   { id: 'report', label: 'Analysis report prepared', status: 'pending' },
 ]
@@ -65,9 +66,10 @@ export const demoAnalysisReport: AnalysisReport = {
     { label: 'Cross-validation prepared', detail: 'Five folds were used for tuning and model comparison.' },
   ],
   models: [
-    { model: 'ridge', label: 'Ridge', r2: 0.82, mae: 0.31, rmse: 0.44, selected: true, parameters: ['alpha = 1.0'], crossValidation: '5-fold cross-validation' },
-    { model: 'lasso', label: 'Lasso', r2: 0.78, mae: 0.36, rmse: 0.49, selected: false, parameters: ['alpha = 0.05'], crossValidation: '5-fold cross-validation' },
-    { model: 'elastic-net', label: 'Elastic Net', r2: 0.8, mae: 0.34, rmse: 0.46, selected: false, parameters: ['alpha = 0.08', 'l1_ratio = 0.4'], crossValidation: '5-fold cross-validation' },
+    { model: 'ridge', label: 'Ridge', r2: 0.82, mae: 0.31, rmse: 0.44, selected: true, parameters: ['alpha = 1.0'], crossValidation: '5-fold cross-validation (random state 42)', holdoutR2: 0.84, holdoutMae: 0.3, holdoutRmse: 0.42 },
+    { model: 'lasso', label: 'Lasso', r2: 0.78, mae: 0.36, rmse: 0.49, selected: false, parameters: ['alpha = 0.05'], crossValidation: '5-fold cross-validation (random state 42)', holdoutR2: 0.8, holdoutMae: 0.35, holdoutRmse: 0.47 },
+    { model: 'elastic-net', label: 'Elastic Net', r2: 0.8, mae: 0.34, rmse: 0.46, selected: false, parameters: ['alpha = 0.08', 'l1_ratio = 0.4'], crossValidation: '5-fold cross-validation (random state 42)', holdoutR2: 0.82, holdoutMae: 0.33, holdoutRmse: 0.44 },
+    { model: 'random-forest', label: 'Random Forest', r2: 0.88, mae: 0.26, rmse: 0.37, selected: false, parameters: ['n_estimators = 300', 'random_state = 42'], crossValidation: '5-fold cross-validation (random state 42)', holdoutR2: 0.9, holdoutMae: 0.24, holdoutRmse: 0.35 },
   ],
   prediction: {
     label: 'Predicted yield',
