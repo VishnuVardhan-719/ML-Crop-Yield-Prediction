@@ -1,0 +1,8 @@
+# Development tooling. Runtime and test dependencies live in requirements.txt.
+-r requirements.txt
+
+# Lint and format. `ruff format --check` and `ruff check` both run in CI.
+ruff==0.16.9
+
+# Static type checker. beta, but it currently reports zero findings on this codebase, so it gates CI.
+ty==0.0.84

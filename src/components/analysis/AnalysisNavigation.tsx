@@ -5,7 +5,7 @@ const sections = [
   ['preprocessing', 'Preprocessing'],
   ['models', 'Models'],
   ['prediction', 'Prediction'],
-  ['explanation', 'AI explanation'],
+  ['explanation', 'Automated summary'],
 ] as const
 
 export function AnalysisNavigation() {

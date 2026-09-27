@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 import { ModelComparison } from './ModelComparison'
 
-const datasetChecks = ['Headers and table structure', 'Numeric, categorical, and date types', 'Missing values and duplicates', 'Identifier and constant columns', 'Target candidates and validity', 'Outlier and leakage indicators']
-const pipeline = ['Validate', 'Split safely', 'Fit preprocessing', 'Tune three models', 'Cross-validate', 'Compare metrics', 'Select model', 'Build report']
+const datasetChecks = ['Headers and table structure', 'Numeric, categorical, and date types', 'Missing values and duplicates', 'Identifier and constant columns', 'Target candidates and validity', 'Outlier, target-redundancy, and train/test-overlap indicators']
+const pipeline = ['Validate', 'Split safely', 'Fit preprocessing', 'Compare four models', 'Cross-validate', 'Compare metrics', 'Select model', 'Build report']
 
 export function ProductDetails() {
   return (
@@ -12,13 +12,13 @@ export function ProductDetails() {
       </section>
 
       <section className="landing-section automation-section">
-        <div className="container"><div className="landing-heading"><h2>The ML workflow runs as one pipeline.</h2><p>Preprocessing is fitted inside validation folds, all three models are evaluated, and the strongest returned result is selected.</p></div><ol className="pipeline-strip">{pipeline.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, '0')}</span>{step}</li>)}</ol></div>
+        <div className="container"><div className="landing-heading"><h2>The ML workflow runs as one pipeline.</h2><p>Preprocessing is fitted inside validation folds, all four models are evaluated cross-validated, and the lowest cross-validated RMSE is selected.</p></div><ol className="pipeline-strip">{pipeline.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, '0')}</span>{step}</li>)}</ol></div>
       </section>
 
       <ModelComparison />
 
       <section className="landing-section explanation-section">
-        <div className="container explanation-layout"><div><p className="kicker">AI explanation</p><h2>Structured evidence in. Careful language out.</h2><p>The explanation boundary receives dataset summary, preprocessing, model results, selected model, metrics, prediction, and supported feature information.</p></div><blockquote>“The model indicates an association within this dataset.”<small>Never “this guarantees yield” or unsupported causal advice.</small></blockquote></div>
+        <div className="container explanation-layout"><div><p className="kicker">Automated summary</p><h2>Structured evidence in. Careful language out.</h2><p>CropCast composes its summary with fixed templates in English, Hindi, and Telugu. No language model is involved and the interface does not claim one: every sentence is derived from the returned metrics, the selected model, and the detected validation risks.</p></div><blockquote>“The model indicates an association within this dataset.”<small>Never “this guarantees yield” or unsupported causal advice.</small></blockquote></div>
       </section>
 
       <section className="landing-section language-voice-section">

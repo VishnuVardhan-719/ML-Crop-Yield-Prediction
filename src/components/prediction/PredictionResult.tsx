@@ -35,7 +35,8 @@ export function PredictionResult({ status, result, message, source, targetLabel,
       </div>
       <h3 ref={headingRef} tabIndex={-1}>Prediction result</h3>
       <p className="result-target">{targetLabel ?? result.targetColumnId}</p>
-      <div className="result-value">{result.value === null ? 'No value returned' : String(result.value)}{result.unit && <small>{result.unit}</small>}</div>
+      <div className="result-value">{Number.isFinite(result.value) ? result.value : 'No value returned'}{result.unit && <small>{result.unitInferred ? `${result.unit} (inferred)` : result.unit}</small>}</div>
+      {result.interval && <p className="result-interval">RMSE-based error band {result.interval.lower} – {result.interval.upper}{result.unit ? ` ${result.unit}` : ''}. <small>{result.interval.method}</small></p>}
       <p className="result-model">Model: {modelLabels[result.model] ?? result.model}</p>
       {result.notices?.length ? <ul className="result-notices">{result.notices.map((notice) => <li key={notice}>{notice}</li>)}</ul> : null}
     </div>

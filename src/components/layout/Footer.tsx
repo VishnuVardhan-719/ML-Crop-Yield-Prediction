@@ -6,7 +6,7 @@ export function Footer() {
       <div className="container footer-inner">
         <div><strong>CropCast</strong><p>Automated agricultural dataset analysis, model evaluation, prediction, and multilingual explanation.</p></div>
         <nav aria-label="Footer navigation"><Link to="/">Home</Link><Link to="/analysis">Analysis</Link></nav>
-        <p className="footer-status">Frontend analysis contract ready<br />Python ML integration pending</p>
+        <p className="footer-status">Local FastAPI analysis service<br />Four models compared against a mean baseline</p>
       </div>
     </footer>
   )

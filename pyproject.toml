@@ -1,0 +1,36 @@
+[tool.ruff]
+line-length = 160
+target-version = "py314"
+extend-exclude = [".venv", "node_modules", "dist"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # import sorting
+  "B",   # flake8-bugbear
+  "C4",  # comprehension checks
+  "SIM", # simplify
+  "NPY", # numpy-specific checks
+  "PD",  # pandas-specific checks
+  "RUF", # ruff-specific checks
+]
+ignore = [
+  # The analysis engine returns deliberately wide dict literals that the frontend consumes.
+  "E501",
+  # `df[column]` is clearer than `.loc` for this codebase's single-column access.
+  "PD011",
+  # `nunique()` is the clearest way to express the "is this column constant?" check used here.
+  "PD101",
+  # Report text deliberately uses typographic characters (×, ±, –, —) rather than ASCII lookalikes.
+  "RUF001",
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/*" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"

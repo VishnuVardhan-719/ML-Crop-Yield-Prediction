@@ -7,9 +7,17 @@
     "dev": "vite",
     "dev:api": ".venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --reload --port 8000",
     "test:api": ".venv\\Scripts\\python.exe -m pytest backend/tests -q",
+    "lint:api": ".venv\\Scripts\\python.exe -m ruff check backend",
+    "format:api": ".venv\\Scripts\\python.exe -m ruff format backend",
+    "format:api:check": ".venv\\Scripts\\python.exe -m ruff format --check backend",
+    "typecheck:api": ".venv\\Scripts\\python.exe -m ty check backend",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "lint": "oxlint",
     "test": "vitest run",
+    "check": "npm run lint && npm run typecheck && npm test && npm run lint:api && npm run typecheck:api && npm run test:api",
+    "generate:sample": ".venv\\Scripts\\python.exe backend/scripts/generate_sample_dataset.py",
+    "generate:demo": ".venv\\Scripts\\python.exe backend/scripts/generate_demo_fixture.py",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,7 +25,8 @@
     "@fontsource/source-serif-4": "^5.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.3"
+    "react-router-dom": "^7.18.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

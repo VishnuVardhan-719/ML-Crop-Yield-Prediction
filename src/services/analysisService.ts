@@ -1,22 +1,26 @@
-import { requestJson, ServiceError } from './predictionService'
+import { z } from 'zod'
+import { analysisReportSchema, targetSelectionSchema } from '../schemas/api'
 import type { AnalysisReport, AnalysisStartResponse } from '../types/analysis'
+import type { ValidationStrategy } from '../types/cropcast'
+import { parseResponse, requestJson } from './predictionService'
+
+/**
+ * `/dataset/analyze` answers with either a finished report or a request to pick a target column.
+ * The two are told apart by the discriminant before parsing, so a broken report reports the exact
+ * field that broke instead of collapsing into an opaque union error.
+ */
+const isTargetSelection = (body: unknown): boolean => typeof body === 'object' && body !== null && 'status' in body && body.status === 'needs-target'
 
 export async function analyzeDataset(file: File, signal?: AbortSignal): Promise<AnalysisStartResponse> {
   const body = new FormData()
   body.append('file', file)
-  const report = await requestJson<AnalysisStartResponse>('/dataset/analyze', { method: 'POST', body, signal })
-  if ('status' in report) {
-    if (report.status === 'needs-target' && report.analysisId && report.candidates.length > 1) return report
-    throw new ServiceError('The analysis response contains an invalid target-selection request.', 'response')
-  }
-  if (!report.analysisId || !report.dataset || !Array.isArray(report.models) || !report.prediction) {
-    throw new ServiceError('The analysis response is missing required report data.', 'response')
-  }
-  return report
+  const decoded = await requestJson<unknown>('/dataset/analyze', { method: 'POST', body, signal }, z.unknown())
+  if (isTargetSelection(decoded)) return parseResponse(targetSelectionSchema, decoded)
+  return parseResponse(analysisReportSchema, decoded)
 }
 
-export async function resumeAnalysis(analysisId: string, target: string, signal?: AbortSignal): Promise<AnalysisReport> {
-  const report = await requestJson<AnalysisReport>('/analysis/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analysisId, target }), signal })
-  if (!report.analysisId || !report.dataset || !Array.isArray(report.models) || !report.prediction) throw new ServiceError('The analysis response is missing required report data.', 'response')
-  return report
+/** Re-run the analysis with an explicit target and validation strategy. */
+export async function resumeAnalysis(analysisId: string, target: string, validation: ValidationStrategy, signal?: AbortSignal): Promise<AnalysisReport> {
+  const body = JSON.stringify({ analysisId, target, validation })
+  return requestJson<AnalysisReport>('/analysis/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal }, analysisReportSchema)
 }

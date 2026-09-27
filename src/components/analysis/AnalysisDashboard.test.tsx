@@ -11,9 +11,16 @@ vi.mock('../../services/predictionService', async (importOriginal) => ({
 }))
 
 describe('AnalysisDashboard field prediction', () => {
-  it('submits a specific field record with the selected model', async () => {
+  it('submits a specific field record and leaves the algorithm to the API', async () => {
     const user = userEvent.setup()
-    predictionService.runPrediction.mockResolvedValue({ predictionId: 'prediction-1', targetColumnId: 'yield', value: 5.2, unit: 't/ha', model: 'ridge' })
+    predictionService.runPrediction.mockResolvedValue({
+      predictionId: 'prediction-1',
+      targetColumnId: 'yield',
+      value: 5.2,
+      unit: 't/ha',
+      model: 'ridge',
+      interval: { level: 0.95, lower: 4.8, upper: 5.6, halfWidth: 0.4, inSample: false, method: 'RMSE-based error band.' },
+    })
     render(<AnalysisDashboard report={{
       ...demoAnalysisReport,
       analysisId: 'dataset-1',
@@ -31,14 +38,21 @@ describe('AnalysisDashboard field prediction', () => {
     await user.selectOptions(screen.getByLabelText('soil'), 'loam')
     await user.click(screen.getByRole('button', { name: 'Predict this field' }))
 
-    expect(predictionService.runPrediction).toHaveBeenCalledWith({
+    const [payload, signal] = predictionService.runPrediction.mock.calls[0] as [Record<string, unknown>, AbortSignal]
+    // No `model` key: naming one would override the best-validated choice the report already made.
+    expect(payload).toEqual({
       datasetId: 'dataset-1',
       targetColumnId: 'yield',
       featureColumnIds: ['rainfall', 'soil'],
-      model: 'ridge',
       inputRecord: { rainfall: 950, soil: 'loam' },
-    }, expect.any(AbortSignal))
+      // The interval must be based on the split the report was scored under.
+      validation: demoAnalysisReport.evaluation.validation.strategy,
+    })
+    // The service passes a combined signal; asserting on the payload separately keeps realms out of it.
+    expect(typeof signal.aborted).toBe('boolean')
     expect(await screen.findByRole('heading', { name: 'Prediction result' })).toBeTruthy()
     expect(screen.getByText('5.2')).toBeTruthy()
+    expect(screen.getByText(/RMSE-based error band 4.8 – 5.6/)).toBeTruthy()
+    expect(screen.getByText(/automatically compares the candidate models for the selected fields/)).toBeTruthy()
   })
 })

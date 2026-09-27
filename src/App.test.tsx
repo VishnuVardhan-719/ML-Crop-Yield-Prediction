@@ -29,11 +29,19 @@ describe('CropCast routes', () => {
     expect(screen.getByRole('heading', { name: 'Model performance' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Best performing model' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Prediction' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'AI explanation' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Automated summary' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'What drove the estimate' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Validation strategy' })).toBeTruthy()
     expect(screen.getByRole('row', { name: /Ridge/ })).toBeTruthy()
     expect(screen.getByRole('row', { name: /Lasso/ })).toBeTruthy()
     expect(screen.getByRole('row', { name: /Elastic Net/ })).toBeTruthy()
   }, 15000)
+
+  it('explains an unknown route instead of rendering an empty page', async () => {
+    window.history.pushState({}, '', '/does-not-exist')
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 1, name: /that page does not exist/i })).toBeTruthy()
+  })
 
   it('redirects the legacy prediction route to analysis', async () => {
     window.history.pushState({}, '', '/predict')

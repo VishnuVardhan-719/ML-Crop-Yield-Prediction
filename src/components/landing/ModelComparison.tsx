@@ -9,7 +9,7 @@ export function ModelComparison() {
   return (
     <section className="landing-section model-comparison">
       <div className="container model-layout">
-        <div className="landing-heading"><h2>Four models. One evidence-based choice.</h2><p>CropCast cross-validates every model, then selects the strongest result from returned R², MAE, and RMSE values.</p></div>
+        <div className="landing-heading"><h2>Four models. One mean baseline. One evidence-based choice.</h2><p>CropCast cross-validates every model and reports R², MAE, and RMSE for all of them, then selects the lowest cross-validated RMSE. If nothing beats simply predicting the mean, it says so instead of crowning a winner.</p></div>
         <div className="model-rows">
           {models.map((model) => <article key={model.title}><span>{model.marker}</span><h3>{model.title}</h3><p>{model.copy}</p></article>)}
         </div>

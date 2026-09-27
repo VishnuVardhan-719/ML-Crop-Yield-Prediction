@@ -3,17 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AnalysisDashboard } from '../components/analysis/AnalysisDashboard'
 import { AnalysisProgress } from '../components/analysis/AnalysisProgress'
 import { FileDropzone } from '../components/dataset/FileDropzone'
-import { analysisStages, runDemoAnalysis } from '../demo/demoAnalysis'
+import { runDemoAnalysis } from '../demo/demoAnalysis'
 import { analyzeDataset, resumeAnalysis } from '../services/analysisService'
 import { ServiceError } from '../services/predictionService'
 import type { AnalysisState } from '../types/analysis'
+import type { ValidationStrategy } from '../types/cropcast'
 
 type NavigationState = { file?: File; demo?: boolean }
 
-const processingStages = analysisStages.map((stage, index) => ({
-  ...stage,
-  status: index === 0 ? 'complete' as const : index === 1 ? 'active' as const : 'pending' as const,
-}))
 const errorMessage = (error: unknown) => error instanceof ServiceError || error instanceof Error
   ? error.message
   : 'CropCast could not analyze this dataset. Check the file and try again.'
@@ -21,6 +18,8 @@ const errorMessage = (error: unknown) => error instanceof ServiceError || error 
 export function Analysis() {
   const [state, setState] = useState<AnalysisState>({ status: 'idle' })
   const [target, setTarget] = useState('')
+  const [validationPending, setValidationPending] = useState<ValidationStrategy>()
+  const [validationError, setValidationError] = useState<string>()
   const location = useLocation()
   const navigate = useNavigate()
   const abortRef = useRef<AbortController | null>(null)
@@ -31,7 +30,7 @@ export function Analysis() {
     const controller = new AbortController()
     const fileType = file.name.split('.').pop()?.toUpperCase() ?? 'FILE'
     abortRef.current = controller
-    setState({ status: 'processing', fileName: file.name, fileSize: file.size, fileType, source: 'uploaded', stages: processingStages })
+    setState({ status: 'processing', fileName: file.name, fileSize: file.size, fileType, source: 'uploaded' })
     try {
       const response = await analyzeDataset(file, controller.signal)
       if (controller.signal.aborted) return
@@ -46,9 +45,12 @@ export function Analysis() {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    setState({ status: 'processing', fileName: 'cropcast_sample.csv', fileSize: 18342, fileType: 'CSV', source: 'demo', stages: processingStages })
+    // The demo reads a static fixture, so it resolves immediately and reports the fixture's own metadata.
     const report = await runDemoAnalysis()
-    if (!controller.signal.aborted) setState({ status: 'complete', report })
+    if (!controller.signal.aborted) {
+      setState({ status: 'processing', fileName: report.dataset.fileName, fileSize: report.dataset.fileSize, fileType: report.dataset.fileType, source: 'demo' })
+      setState({ status: 'complete', report })
+    }
   }
 
   const continueWithTarget = async () => {
@@ -56,12 +58,32 @@ export function Analysis() {
     const controller = new AbortController()
     const pending = state
     abortRef.current = controller
-    setState({ status: 'processing', fileName: state.fileName, fileSize: state.fileSize, fileType: state.fileType, source: 'uploaded', stages: processingStages })
+    setState({ status: 'processing', fileName: state.fileName, fileSize: state.fileSize, fileType: state.fileType, source: 'uploaded' })
     try {
-      const report = await resumeAnalysis(pending.analysisId, target, controller.signal)
+      const report = await resumeAnalysis(pending.analysisId, target, 'random', controller.signal)
       if (!controller.signal.aborted) setState({ status: 'complete', report })
     } catch (error) {
       if (!controller.signal.aborted) setState({ status: 'error', message: errorMessage(error) })
+    }
+  }
+
+  /** Re-score every model under another split, keeping the current report visible until it lands. */
+  const changeValidation = async (strategy: ValidationStrategy) => {
+    if (state.status !== 'complete') return
+    const { analysisId } = state.report
+    const { target: analysisTarget } = state.report.dataset
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setValidationError(undefined)
+    setValidationPending(strategy)
+    try {
+      const report = await resumeAnalysis(analysisId, analysisTarget, strategy, controller.signal)
+      if (!controller.signal.aborted) setState({ status: 'complete', report })
+    } catch (error) {
+      if (!controller.signal.aborted) setValidationError(errorMessage(error))
+    } finally {
+      if (!controller.signal.aborted) setValidationPending(undefined)
     }
   }
 
@@ -79,17 +101,25 @@ export function Analysis() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  if (state.status === 'complete') return <AnalysisDashboard report={state.report} />
+  if (state.status === 'complete') {
+    const report = state.report
+    // A replayable fixture cannot be re-scored, so the demo gets no strategy control.
+    const controls = report.source === 'demo'
+      ? undefined
+      : { pending: validationPending, error: validationError, onChange: (strategy: ValidationStrategy) => void changeValidation(strategy) }
+    // Remount on a new strategy so a pending prediction or field record cannot outlive the scores it came from.
+    return <AnalysisDashboard key={`${report.analysisId}:${report.evaluation.validation.strategy}`} report={report} validationControls={controls} />
+  }
 
   return (
     <div className="analysis-page container">
       <header className="analysis-page-header">
         <p className="kicker">CropCast workspace</p>
         <h1>Automated agricultural analysis</h1>
-        <p>Drop one supported dataset. CropCast will profile, validate, preprocess, compare three regularized models, and assemble the returned evidence into one report.</p>
+        <p>Drop one supported dataset. CropCast will profile, validate, preprocess, compare four regression models, and assemble the returned evidence into one report.</p>
       </header>
       {state.status === 'processing' && (
-        <AnalysisProgress fileName={state.fileName} fileSize={state.fileSize} fileType={state.fileType} source={state.source} stages={state.stages} />
+        <AnalysisProgress fileName={state.fileName} fileSize={state.fileSize} fileType={state.fileType} source={state.source} />
       )}
       {state.status === 'needs-target' && (
         <section className="target-resolution" aria-labelledby="target-resolution-title">

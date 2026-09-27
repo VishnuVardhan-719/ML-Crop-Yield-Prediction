@@ -1,4 +1,4 @@
-const steps = ['Drop dataset', 'Profile and validate', 'Prepare data', 'Train three models', 'Cross-validate', 'Select best model', 'Predict', 'Explain', 'Listen or download']
+const steps = ['Drop dataset', 'Profile and validate', 'Prepare data', 'Train four models', 'Cross-validate', 'Select best model', 'Predict', 'Explain', 'Listen or download']
 
 export function WorkflowOverview() {
   return (

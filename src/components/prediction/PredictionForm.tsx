@@ -74,9 +74,9 @@ export function PredictionForm({ columns, targetColumnId, featureColumnIds, inpu
                       {column.allowedValues.map((value) => <option key={String(value)} value={String(value)}>{String(value)}</option>)}
                     </select>
                   ) : (
-                    <input id={id} type={column.dataType === 'number' || column.dataType === 'integer' ? 'number' : column.dataType === 'date' ? 'date' : 'text'} step={column.dataType === 'integer' ? '1' : 'any'} value={scalarValue(inputRecord[column.id] ?? null)} aria-invalid={Boolean(errors[column.id])} aria-describedby={describedBy} onChange={(event) => updateValue(column, event)} />
+                    <input id={id} type={column.dataType === 'number' || column.dataType === 'integer' ? 'number' : 'text'} step={column.dataType === 'integer' ? '1' : 'any'} value={scalarValue(inputRecord[column.id] ?? null)} aria-invalid={Boolean(errors[column.id])} aria-describedby={describedBy} onChange={(event) => updateValue(column, event)} />
                   )}
-                  {column.unit && !errors[column.id] && <small id={`${id}-help`} className="field-help">Unit supplied by dataset: {column.unit}</small>}
+                  {column.unit && !errors[column.id] && <small id={`${id}-help`} className="field-help">{column.unitInferred ? `Unit inferred from the column name: ${column.unit} — confirm before use` : `Unit: ${column.unit}`}</small>}
                   {errors[column.id] && <small id={`${id}-error`} className="field-error" role="alert">{errors[column.id]}</small>}
                 </div>
               )

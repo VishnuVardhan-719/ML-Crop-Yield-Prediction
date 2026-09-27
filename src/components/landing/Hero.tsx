@@ -19,7 +19,7 @@ export function Hero() {
         <div className="hero-copy-block">
           <p className="kicker">Automated agricultural machine learning</p>
           <h1>Drop your agricultural data. CropCast does the analysis.</h1>
-          <p>Profile the dataset, prepare features, compare three regularized models, and receive one understandable prediction report.</p>
+          <p>Profile the dataset, prepare features, compare four regression models, and receive one understandable prediction report.</p>
           <a className="quiet-link" href="#product-flow">See how it works</a>
         </div>
         <div className="hero-upload">
