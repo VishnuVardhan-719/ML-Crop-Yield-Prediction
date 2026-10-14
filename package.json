@@ -13,11 +13,12 @@
     "typecheck:api": ".venv\\Scripts\\python.exe -m ty check backend",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "lint": "oxlint",
+    "lint": "oxlint src vite.config.ts",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test && npm run lint:api && npm run typecheck:api && npm run test:api",
     "generate:sample": ".venv\\Scripts\\python.exe backend/scripts/generate_sample_dataset.py",
     "generate:demo": ".venv\\Scripts\\python.exe backend/scripts/generate_demo_fixture.py",
+    "benchmark:real": ".venv\\Scripts\\python.exe -m backend.scripts.benchmark_real_data",
     "preview": "vite preview"
   },
   "dependencies": {

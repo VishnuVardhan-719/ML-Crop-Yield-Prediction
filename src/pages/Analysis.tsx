@@ -9,7 +9,7 @@ import { ServiceError } from '../services/predictionService'
 import type { AnalysisState } from '../types/analysis'
 import type { ValidationStrategy } from '../types/cropcast'
 
-type NavigationState = { file?: File; demo?: boolean }
+type NavigationState = { file?: File; demo?: boolean; reset?: boolean }
 
 const errorMessage = (error: unknown) => error instanceof ServiceError || error instanceof Error
   ? error.message
@@ -87,10 +87,25 @@ export function Analysis() {
     }
   }
 
+  const uploadAnother = () => {
+    abortRef.current?.abort()
+    setTarget('')
+    setValidationPending(undefined)
+    setValidationError(undefined)
+    setState({ status: 'idle' })
+  }
+
   useEffect(() => {
+    const handoff = location.state as NavigationState | null
+    if (handoff?.reset) {
+      queueMicrotask(() => {
+        uploadAnother()
+        void navigate('/analysis', { replace: true, state: null })
+      })
+      return
+    }
     if (handoffHandled.current) return
     handoffHandled.current = true
-    const handoff = location.state as NavigationState | null
     if (!handoff) return
     queueMicrotask(() => {
       if (handoff.file) void runFile(handoff.file)
@@ -107,8 +122,8 @@ export function Analysis() {
     const controls = report.source === 'demo'
       ? undefined
       : { pending: validationPending, error: validationError, onChange: (strategy: ValidationStrategy) => void changeValidation(strategy) }
-    // Remount on a new strategy so a pending prediction or field record cannot outlive the scores it came from.
-    return <AnalysisDashboard key={`${report.analysisId}:${report.evaluation.validation.strategy}`} report={report} validationControls={controls} />
+    // Keep entered field values when re-scoring; the dashboard invalidates results and pending requests.
+    return <AnalysisDashboard key={`${report.analysisId}:${report.dataset.target}`} report={report} validationControls={controls} onUploadAnother={uploadAnother} />
   }
 
   return (

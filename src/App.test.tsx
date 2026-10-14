@@ -28,7 +28,7 @@ describe('CropCast routes', () => {
     expect(screen.getByRole('heading', { name: 'Preprocessing' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Model performance' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Best performing model' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Prediction' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Predict a new record' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Automated summary' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'What drove the estimate' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Validation strategy' })).toBeTruthy()
@@ -41,6 +41,17 @@ describe('CropCast routes', () => {
     window.history.pushState({}, '', '/does-not-exist')
     render(<App />)
     expect(await screen.findByRole('heading', { level: 1, name: /that page does not exist/i })).toBeTruthy()
+  })
+
+  it('opens the uploader when starting a new analysis from an existing report', async () => {
+    window.history.pushState({}, '', '/analysis')
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Run demo analysis' }))
+    expect(await screen.findByRole('button', { name: 'Upload another dataset' })).toBeTruthy()
+    await user.click(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Start analysis' }))
+    expect(await screen.findByRole('button', { name: 'Browse files' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull()
   })
 
   it('redirects the legacy prediction route to analysis', async () => {

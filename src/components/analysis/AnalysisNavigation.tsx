@@ -1,11 +1,14 @@
 const sections = [
   ['overview', 'Overview'],
+  ['models', 'Compare models'],
+  ['prediction', 'Predict a new record'],
+  ['evidence', 'Testing evidence'],
   ['quality', 'Data quality'],
   ['exploration', 'Exploration'],
   ['preprocessing', 'Preprocessing'],
-  ['models', 'Models'],
-  ['prediction', 'Prediction'],
+  ['insights', 'Model associations'],
   ['explanation', 'Automated summary'],
+  ['visuals', 'Visuals'],
 ] as const
 
 export function AnalysisNavigation() {

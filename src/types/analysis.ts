@@ -1,4 +1,4 @@
-import type { ColumnDescriptor, Language, ModelKind, PredictionInterval, ValidationStrategy } from './cropcast'
+import type { ColumnDescriptor, Language, ModelKind, PredictionInterval, Scalar, ValidationStrategy } from './cropcast'
 
 export type QualityStatus = 'good' | 'warning' | 'review'
 
@@ -110,6 +110,7 @@ export type AnalysisReport = {
   prediction: {
     label: string
     value: number
+    inputRecord?: Record<string, Scalar>
     unit?: string
     unitInferred?: boolean
     interval: PredictionInterval | null

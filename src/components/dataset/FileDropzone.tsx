@@ -62,6 +62,7 @@ export function FileDropzone({ status, message, onFile, onInvalid, onDemo }: Fil
         <a className="text-button" href="/sample-datasets/sample-field-trials.csv" download>Download sample dataset</a>
         <button type="button" className="text-button" disabled={busy} onClick={onDemo}>Run demo analysis</button>
       </div>
+      <p className="field-help">The sample CSV is synthetic. Upload it to train models and predict a new record. Demo analysis only previews a saved report.</p>
     </div>
   )
 }

@@ -11,6 +11,7 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 from fastapi import HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.dummy import DummyRegressor
@@ -133,8 +134,8 @@ GROUPED_SPLIT_NOTE = (
     "{entity}, not accuracy on a record from a familiar one."
 )
 TEMPORAL_SPLIT_NOTE = (
-    "Rows are ordered by {column} and the last 25% are held out, so every test row is later than every training row. "
-    "These scores describe an earlier-to-later extrapolation inside this dataset."
+    "Rows are ordered by {column} and the latest roughly 25% of distinct periods are held out together, so every test row is later than every training row. "
+    "These scores describe an earlier-to-later extrapolation inside this dataset. Use ISO YYYY-MM-DD dates to avoid ambiguous day/month conventions."
 )
 
 PERMUTATION_REPEATS = 10
@@ -267,6 +268,13 @@ def parse_dataset(payload: bytes, suffix: str, file_name: str) -> DatasetRecord:
     # user picks in the prediction form. pandas 3 stores text as `str`, not `object`, so both are checked.
     for column in frame.columns:
         series = frame[column]
+        for value in series.dropna().unique():
+            try:
+                number = float(value)
+            except TypeError, ValueError:
+                continue
+            if np.isinf(number):
+                raise fail(f"Column {column} contains infinite numeric values. Use finite numbers or leave missing values blank.")
         if not (pd.api.types.is_string_dtype(series) or series.dtype == object):
             continue
         frame[column] = series.map(lambda value: value.strip() if isinstance(value, str) else value)
@@ -285,7 +293,7 @@ async def read_dataset(file: UploadFile) -> DatasetRecord:
         raise fail("The uploaded file is empty.")
     if len(payload) > MAX_UPLOAD_BYTES:
         raise fail("The dataset must be 10 MB or smaller.")
-    return parse_dataset(payload, suffix, file_name)
+    return await run_in_threadpool(parse_dataset, payload, suffix, file_name)
 
 
 def numeric_columns(frame: pd.DataFrame) -> list[str]:
@@ -328,6 +336,7 @@ def column_descriptor(frame: pd.DataFrame, column: str, excluded_features: set[s
         "eligibleAsTarget": column in candidate_targets(frame),
         "eligibleAsFeature": is_supported_feature(frame, column)
         and not looks_like_identifier(column, series)
+        and series.nunique(dropna=True) > 1
         and (excluded_features is None or column not in excluded_features),
     }
     if data_type in {"boolean", "category"}:
@@ -366,10 +375,16 @@ def make_pipeline(frame: pd.DataFrame, features: list[str], estimator: Any) -> P
     categorical = [column for column in features if column not in numeric]
     transformers: list[tuple[str, Pipeline, list[str]]] = []
     if numeric:
-        transformers.append(("numeric", Pipeline([("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]), numeric))
+        transformers.append(
+            ("numeric", Pipeline([("imputer", SimpleImputer(strategy="median", keep_empty_features=True)), ("scaler", StandardScaler())]), numeric)
+        )
     if categorical:
         transformers.append(
-            ("categorical", Pipeline([("imputer", SimpleImputer(strategy="most_frequent")), ("encoder", OneHotEncoder(handle_unknown="ignore"))]), categorical)
+            (
+                "categorical",
+                Pipeline([("imputer", SimpleImputer(strategy="most_frequent", keep_empty_features=True)), ("encoder", OneHotEncoder(handle_unknown="ignore"))]),
+                categorical,
+            )
         )
     return Pipeline([("preprocessor", ColumnTransformer(transformers)), ("model", clone(estimator))])
 
@@ -417,7 +432,15 @@ def build_input_row(frame: pd.DataFrame, features: list[str], values: dict[str, 
     for column in features:
         value = values.get(column)
         if pd.api.types.is_numeric_dtype(frame[column]):
-            row[column] = pd.Series([pd.to_numeric(value, errors="coerce")], dtype="float64")
+            try:
+                if isinstance(value, (list, dict)) or (isinstance(value, bool) and not pd.api.types.is_bool_dtype(frame[column])):
+                    raise ValueError
+                number = float(value) if value is not None else np.nan
+                if value is not None and not np.isfinite(number):
+                    raise ValueError
+            except (TypeError, ValueError, OverflowError) as error:
+                raise fail(f"Provide a finite numeric value for {column}, or leave it absent for imputation.") from error
+            row[column] = pd.Series([number], dtype="float64")
         else:
             row[column] = pd.Series([value], dtype="object")
     return pd.DataFrame(row, columns=features)
@@ -493,23 +516,39 @@ def entity_column(frame: pd.DataFrame, target: str) -> str | None:
 def ordering_column(frame: pd.DataFrame, target: str) -> str | None:
     """The column rows can be ordered by, when one exists."""
     column = temporal_column(frame, target)
-    if column is None or frame[column].nunique(dropna=True) < 2:
+    if column is None:
+        return None
+    try:
+        periods = temporal_values(frame, column)
+    except HTTPException:
+        return None
+    if periods.nunique() < 3:
         return None
     return column
 
 
+def temporal_values(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Comparable periods; an unknown date cannot safely be assigned to the past."""
+    series = frame[column]
+    if pd.api.types.is_numeric_dtype(series):
+        valid = series.notna() & np.isfinite(series)
+    else:
+        series = pd.to_datetime(series, errors="coerce", format="mixed", utc=True)
+        valid = series.notna()
+    if not valid.all():
+        raise fail(f"Temporal column {column} contains missing or invalid values on labelled rows.")
+    return series
+
+
 def temporal_order(frame: pd.DataFrame, column: str) -> np.ndarray:
     """Frame positions in time order, so a later row is never used to predict an earlier one."""
-    series = frame[column]
-    if not (pd.api.types.is_datetime64_any_dtype(series) or pd.api.types.is_numeric_dtype(series)):
-        series = series.fillna("missing").astype(str)
-    # Missing timestamps sort first, so they can only ever train a model, never flatter it in a test score.
-    ordered = series.sort_values(kind="stable", na_position="first").index
+    ordered = temporal_values(frame, column).sort_values(kind="stable").index
     return frame.index.get_indexer(ordered)
 
 
 def validation_options(frame: pd.DataFrame, target: str) -> list[dict[str, Any]]:
     """Every strategy the user may choose, with why an unavailable one cannot be used."""
+    frame = frame.loc[pd.to_numeric(frame[target], errors="coerce").notna()]
     entity = entity_column(frame, target)
     order = ordering_column(frame, target)
     return [
@@ -518,14 +557,16 @@ def validation_options(frame: pd.DataFrame, target: str) -> list[dict[str, Any]]
             "key": VALIDATION_GROUPED,
             "label": f"Grouped by {entity}" if entity else "Grouped split",
             "available": entity is not None,
-            "reason": "" if entity else "CropCast found no field, farm, plot, or other entity column to group on.",
+            "reason": "" if entity else "CropCast found no field, farm, plot, or other entity column with at least two labelled groups to group on.",
             "note": GROUPED_SPLIT_NOTE.format(entity=entity) if entity else "",
         },
         {
             "key": VALIDATION_TEMPORAL,
             "label": f"Temporal, ordered by {order}" if order else "Temporal split",
             "available": order is not None,
-            "reason": "" if order else "CropCast found no date, season, or year column to order rows by.",
+            "reason": ""
+            if order
+            else "Temporal validation requires a date, season, or year column with valid, non-missing values on labelled rows and at least three distinct periods.",
             "note": TEMPORAL_SPLIT_NOTE.format(column=order) if order else "",
         },
     ]
@@ -549,7 +590,8 @@ def validation_split(full_frame: pd.DataFrame, frame: pd.DataFrame, y: pd.Series
     `full_frame` and re-aligned to the rows the models actually see. Folds are positional, and for
     a temporal split they are mapped through the time order, so every fold trains on the past.
     """
-    options = {option["key"]: option for option in validation_options(full_frame, target)}
+    labelled = full_frame.loc[frame.index]
+    options = {option["key"]: option for option in validation_options(labelled, target)}
     if strategy not in options:
         raise fail("Choose one of the reported validation strategies.")
     option = options[strategy]
@@ -562,7 +604,7 @@ def validation_split(full_frame: pd.DataFrame, frame: pd.DataFrame, y: pd.Series
     groups: np.ndarray | None = None
 
     if strategy == VALIDATION_GROUPED:
-        entity = entity_column(full_frame, target)
+        entity = entity_column(labelled, target)
         groups = full_frame.loc[frame.index, entity].fillna("Missing").astype(str).to_numpy()
         group_folds = min(folds, int(pd.Series(groups).nunique()))
         splitter: Any = GroupKFold(n_splits=group_folds)
@@ -570,17 +612,22 @@ def validation_split(full_frame: pd.DataFrame, frame: pd.DataFrame, y: pd.Series
         label = f"Grouped by {entity}"
         cv_label = f"{group_folds}-fold grouped cross-validation on all {total} usable rows (grouped by {entity})"
     elif strategy == VALIDATION_TEMPORAL:
-        column = ordering_column(full_frame, target)
+        column = ordering_column(labelled, target)
         if column is None:
             raise fail(f"Temporal validation cannot be used for this dataset: {options[VALIDATION_TEMPORAL]['reason']}")
-        ordered = temporal_order(full_frame.loc[frame.index], column)
-        splitter = TimeSeriesSplit(n_splits=min(folds, total - 1))
-        holdout = None
+        ordered = temporal_order(labelled, column)
+        periods = temporal_values(labelled, column).iloc[ordered]
+        codes, distinct = pd.factorize(periods, sort=False)
+        period_count = len(distinct)
+        splitter = TimeSeriesSplit(n_splits=min(folds, period_count - 1))
+        cv = [(ordered[np.isin(codes, train)], ordered[np.isin(codes, test)]) for train, test in splitter.split(np.arange(period_count))]
+        cut = min(max(round(period_count * (1 - HOLDOUT_FRACTION)), 1), period_count - 1)
+        train_positions, test_positions = ordered[codes < cut], ordered[codes >= cut]
         label = f"Temporal, ordered by {column}"
         # Forward-chaining folds never test on the earliest rows, so say how many are actually scored.
-        first_train, _ = next(iter(splitter.split(ordered)))
-        scored = total - len(first_train)
+        scored = sum(len(test) for _, test in cv)
         cv_label = f"{splitter.n_splits}-fold forward-chaining cross-validation over the {scored} later rows of {total} usable rows (ordered by {column})"
+        return ValidationSplit(strategy, label, cv_label, cv, train_positions, test_positions)
     else:
         splitter = KFold(n_splits=folds, shuffle=True, random_state=RANDOM_STATE)
         holdout = None
@@ -588,10 +635,7 @@ def validation_split(full_frame: pd.DataFrame, frame: pd.DataFrame, y: pd.Series
         cv_label = f"{folds}-fold shuffled cross-validation on all {total} usable rows (random state {RANDOM_STATE})"
 
     cv = [(ordered[train], ordered[test]) for train, test in splitter.split(ordered, y, groups=groups)]
-    if holdout is None and strategy == VALIDATION_TEMPORAL:
-        cut = min(max(round(total * (1 - HOLDOUT_FRACTION)), 1), total - 1)
-        train_positions, test_positions = ordered[:cut], ordered[cut:]
-    elif holdout is None:
+    if holdout is None:
         train_positions, test_positions = train_test_split(ordered, test_size=HOLDOUT_FRACTION, random_state=RANDOM_STATE)
     else:
         train_positions, test_positions = next(holdout.split(ordered, y, groups=groups))
@@ -736,6 +780,41 @@ def redundant_features(frame: pd.DataFrame, target: str, features: list[str]) ->
     return redundant
 
 
+def matches_stored_rounding(observed: pd.Series, values: pd.Series, maximum_decimals: int = 6) -> bool:
+    """Whether one scale reproduces every target after its stored decimal rounding.
+
+    This is still an exact-definition test, not an approximate similarity test: every row must land
+    inside the rounding bin for its stored target value under the same constant scale.
+    """
+    observed_array = observed.to_numpy(dtype=float)
+    values_array = values.to_numpy(dtype=float)
+    if observed_array.size == 0 or not np.isfinite(observed_array).all() or not np.isfinite(values_array).all():
+        return False
+    nonzero = values_array != 0
+    if np.any(observed_array[~nonzero] != 0):
+        return False
+    if not nonzero.any():
+        return True
+    decimals = next(
+        (
+            places
+            for places in range(maximum_decimals + 1)
+            if np.allclose(observed_array, np.round(observed_array, places), rtol=0, atol=10 ** (-(maximum_decimals + 2)))
+        ),
+        None,
+    )
+    if decimals is None:
+        return False
+    half_step = 0.5 * 10**-decimals
+    bounds = np.column_stack(((observed_array[nonzero] - half_step) / values_array[nonzero], (observed_array[nonzero] + half_step) / values_array[nonzero]))
+    lower = float(np.max(np.min(bounds, axis=1)))
+    upper = float(np.min(np.max(bounds, axis=1)))
+    if not np.isfinite(lower) or not np.isfinite(upper) or lower > upper:
+        return False
+    scale = (lower + upper) / 2
+    return bool(np.allclose(observed_array, np.round(scale * values_array, decimals), rtol=0, atol=10 ** (-(maximum_decimals + 2))))
+
+
 def defining_features(frame: pd.DataFrame, target: str, features: list[str]) -> list[tuple[str, str, str]]:
     """Feature pairs whose ratio or product reproduces the target, with the relation that does it.
 
@@ -744,9 +823,10 @@ def defining_features(frame: pd.DataFrame, target: str, features: list[str]) -> 
     model given the pair scores near-perfectly without learning anything, and the report would present
     that arithmetic as a discovered driver.
 
-    The test requires one constant conversion factor to reproduce every usable target value. Looser
-    approximate matches are warnings at most; excluding them here would let validation targets affect
-    feature selection and would misclassify smooth, correlated columns on small datasets.
+    The test requires one constant conversion factor to reproduce every usable target value, either at
+    full precision or after the target's exact stored decimal rounding. Looser approximate matches are
+    warnings at most; excluding them here would let validation targets affect feature selection and
+    would misclassify smooth, correlated columns on small datasets.
     """
     numeric = [column for column in features if pd.api.types.is_numeric_dtype(frame[column])]
     target_values = pd.to_numeric(frame[target], errors="coerce")
@@ -772,15 +852,14 @@ def defining_features(frame: pd.DataFrame, target: str, features: list[str]) -> 
                 if int(usable.sum()) < MIN_TARGET_ROWS:
                     continue
                 values, observed = expression[usable], paired["target"][usable]
-                nonzero = values.ne(0) & observed.ne(0)
+                nonzero = values.ne(0)
                 if int(nonzero.sum()) < MIN_TARGET_ROWS:
                     continue
-                values, observed = values[nonzero], observed[nonzero]
-                ratios = observed / values
+                ratios = observed[nonzero] / values[nonzero]
                 scale = float(ratios.median())
                 if not np.isfinite(scale) or scale == 0:
                     continue
-                exact = bool(np.allclose(observed, scale * values, rtol=1e-9, atol=1e-12))
+                exact = bool(np.allclose(observed, scale * values, rtol=1e-9, atol=1e-12)) or matches_stored_rounding(observed, values)
                 if exact:
                     found.append((first, second, relation))
                     break
@@ -1016,12 +1095,10 @@ def model_insights(
 def explanations(model: str, target: str, insights: list[dict[str, Any]]) -> dict[str, str]:
     """Deterministic, template-based summary. This is not a language model and is not labelled as one."""
     top = insights[0]["feature"] if insights else "the available features"
-    english = f"{model} had the lowest cross-validated RMSE for predicting {target}. In this uploaded dataset, {top} is among the strongest model associations. This is an association-based estimate, not evidence of causation."
+    english = f"{model} predicts {target} using the uploaded dataset. In this uploaded dataset, {top} is among the strongest model associations. This is an association-based estimate, not evidence of causation."
     # Every locale names the same top feature so the three languages carry the same information.
-    hindi = (
-        f"{model} ने {target} के लिए क्रॉस-वैलिडेशन RMSE में सबसे अच्छा प्रदर्शन किया। इस डेटा में {top} सबसे मजबूत संबंधों में से है। यह अनुमान संबंध पर आधारित है और कारण सिद्ध नहीं करता।"
-    )
-    telugu = f"{model} {target} కోసం క్రాస్-వాలిడేషన్ RMSEలో ఉత్తమంగా పనిచేసింది. ఈ డేటాలో {top} బలమైన సంబంధాలలో ఒకటి. ఇది సంబంధం ఆధారిత అంచనా, కారణానికి నిరూపణ కాదు."
+    hindi = f"{model} अपलोड किए गए डेटा से {target} का अनुमान लगाता है। इस डेटा में {top} सबसे मजबूत संबंधों में से है। यह अनुमान संबंध पर आधारित है और कारण सिद्ध नहीं करता।"
+    telugu = f"{model} అప్‌లోడ్ చేసిన డేటాను ఉపయోగించి {target}ను అంచనా వేస్తుంది. ఈ డేటాలో {top} బలమైన సంబంధాలలో ఒకటి. ఇది సంబంధం ఆధారిత అంచనా, కారణానికి నిరూపణ కాదు."
     return {"en": english, "hi": hindi, "te": telugu}
 
 
@@ -1122,7 +1199,7 @@ def build_report(record: DatasetRecord, target: str, strategy: str = VALIDATION_
     return {
         "analysisId": record.dataset_id,
         "source": "uploaded",
-        "inputColumns": [column_descriptor(record.frame, column, set(defining)) for column in record.frame.columns],
+        "inputColumns": [column_descriptor(record.frame, column, set(record.frame.columns) - set(features)) for column in record.frame.columns],
         "dataset": {
             "fileName": record.file_name,
             "fileSize": record.file_size,
@@ -1151,7 +1228,7 @@ def build_report(record: DatasetRecord, target: str, strategy: str = VALIDATION_
         "evaluation": {
             "selectionRule": SELECTION_RULE,
             "holdoutSummary": f"{fitted.strategy_label} holdout — {fitted.actual.size} test rows, {len(target_values) - fitted.actual.size} training rows",
-            "note": "Cross-validated metrics use every usable row, while holdout metrics come from one split of that same data. They are reported side by side for transparency and are not directly comparable.",
+            "note": "Cross-validated metrics use only rows tested by the validation folds. The holdout overlaps the data used for model-selection cross-validation, so it is not an independent final test. These metrics are reported side by side for transparency and are not directly comparable.",
             "baseline": baseline,
             "beatsBaseline": beats_baseline,
             "improvementOverBaseline": improvement,
@@ -1167,7 +1244,8 @@ def build_report(record: DatasetRecord, target: str, strategy: str = VALIDATION_
         },
         "models": evaluations,
         "prediction": {
-            "label": f"Representative predicted {target}",
+            "label": "Example prediction using typical inputs",
+            "inputRecord": {column: to_json(value) for column, value in profile_record.items()},
             "value": round(headline, 4),
             "unit": unit,
             "unitInferred": bool(unit),

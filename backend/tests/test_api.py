@@ -216,7 +216,8 @@ def test_prediction_with_random_forest_works_end_to_end():
     assert explanation.status_code == 200
     text = explanation.json()["text"]
     assert "Random Forest" in text
-    assert "cross-validated" in text
+    assert "association-based estimate" in text
+    assert "not evidence of causation" in text
 
 
 def test_explanation_for_an_unknown_prediction_reports_a_404():
@@ -561,10 +562,10 @@ def test_the_report_says_how_much_holdout_evidence_it_is_showing():
         assert point["residual"] == pytest.approx(point["actual"] - point["predicted"], abs=1e-3)
 
 
-def test_prediction_label_names_the_actual_target():
+def test_prediction_label_distinguishes_the_typical_input_example():
     report = analyze(SINGLE_TARGET_CSV)
 
-    assert report["prediction"]["label"] == "Representative predicted yield"
+    assert report["prediction"]["label"] == "Example prediction using typical inputs"
 
 
 def test_report_prediction_carries_an_rmse_error_band_with_its_method():

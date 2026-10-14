@@ -1,0 +1,683 @@
+{
+  "protocol": "Frozen model; rolling one-year-ahead forecasts using known previous-year yields. Not a five-year forecast or field-yield validation.",
+  "features": [
+    "country",
+    "year",
+    "previous_season_t_ha"
+  ],
+  "training": {
+    "first_year": 1962,
+    "last_year": 2019,
+    "rows": 290
+  },
+  "holdout": {
+    "years": [
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "rows": 25
+  },
+  "selection": {
+    "model": "ridge",
+    "parameters": [
+      "alpha = 1.0"
+    ],
+    "rule": "Lowest pooled forward-validation RMSE on pre-holdout years only",
+    "candidates": [
+      {
+        "model": "ridge",
+        "label": "Ridge",
+        "rmse_t_ha": 0.16382465674519223,
+        "mae_t_ha": 0.13113718267603722,
+        "r2": 0.9707301244140061
+      },
+      {
+        "model": "lasso",
+        "label": "Lasso",
+        "rmse_t_ha": 0.23959954605634728,
+        "mae_t_ha": 0.1856993632764297,
+        "r2": 0.9373913520901344
+      },
+      {
+        "model": "elastic-net",
+        "label": "Elastic Net",
+        "rmse_t_ha": 0.23295779970648806,
+        "mae_t_ha": 0.1764461247528216,
+        "r2": 0.9408142909932471
+      },
+      {
+        "model": "random-forest",
+        "label": "Random Forest",
+        "rmse_t_ha": 0.49412760633320907,
+        "mae_t_ha": 0.3335739676801598,
+        "r2": 0.7337187547252868
+      }
+    ],
+    "folds": [
+      {
+        "train_years": [
+          1962,
+          1963,
+          1964,
+          1965,
+          1966,
+          1967,
+          1968,
+          1969,
+          1970,
+          1971,
+          1972,
+          1973,
+          1974,
+          1975,
+          1976,
+          1977
+        ],
+        "validation_years": [
+          1978,
+          1979,
+          1980,
+          1981,
+          1982,
+          1983,
+          1984,
+          1985,
+          1986,
+          1987,
+          1988,
+          1989,
+          1990,
+          1991
+        ]
+      },
+      {
+        "train_years": [
+          1962,
+          1963,
+          1964,
+          1965,
+          1966,
+          1967,
+          1968,
+          1969,
+          1970,
+          1971,
+          1972,
+          1973,
+          1974,
+          1975,
+          1976,
+          1977,
+          1978,
+          1979,
+          1980,
+          1981,
+          1982,
+          1983,
+          1984,
+          1985,
+          1986,
+          1987,
+          1988,
+          1989,
+          1990,
+          1991
+        ],
+        "validation_years": [
+          1992,
+          1993,
+          1994,
+          1995,
+          1996,
+          1997,
+          1998,
+          1999,
+          2000,
+          2001,
+          2002,
+          2003,
+          2004,
+          2005
+        ]
+      },
+      {
+        "train_years": [
+          1962,
+          1963,
+          1964,
+          1965,
+          1966,
+          1967,
+          1968,
+          1969,
+          1970,
+          1971,
+          1972,
+          1973,
+          1974,
+          1975,
+          1976,
+          1977,
+          1978,
+          1979,
+          1980,
+          1981,
+          1982,
+          1983,
+          1984,
+          1985,
+          1986,
+          1987,
+          1988,
+          1989,
+          1990,
+          1991,
+          1992,
+          1993,
+          1994,
+          1995,
+          1996,
+          1997,
+          1998,
+          1999,
+          2000,
+          2001,
+          2002,
+          2003,
+          2004,
+          2005
+        ],
+        "validation_years": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019
+        ]
+      }
+    ]
+  },
+  "metrics": {
+    "selected_model": {
+      "rmse_t_ha": 0.1033679997223825,
+      "mae_t_ha": 0.08697186920876158,
+      "r2": 0.990468444390588
+    },
+    "training_mean": {
+      "rmse_t_ha": 1.966544923189933,
+      "mae_t_ha": 1.6571939054827587,
+      "r2": -2.449842792021816
+    },
+    "previous_year": {
+      "rmse_t_ha": 0.11997390085533934,
+      "mae_t_ha": 0.09510394800000004,
+      "r2": 0.9871599971236923
+    }
+  },
+  "beats_previous_year": true,
+  "by_country": {
+    "Bangladesh": {
+      "selected_model": {
+        "rmse_t_ha": 0.12563451524871855,
+        "mae_t_ha": 0.09987628103172215,
+        "r2": 0.6733958467717714
+      },
+      "training_mean": {
+        "rmse_t_ha": 1.3342292660308024,
+        "mae_t_ha": 1.3159939294827587,
+        "r2": -35.83534072757752
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.1655532311979141,
+        "mae_t_ha": 0.13662006,
+        "r2": 0.432874612021124
+      }
+    },
+    "China": {
+      "selected_model": {
+        "rmse_t_ha": 0.10099604624270232,
+        "mae_t_ha": 0.09369442969131203,
+        "r2": -1.2115258339551498
+      },
+      "training_mean": {
+        "rmse_t_ha": 3.7219136339530468,
+        "mae_t_ha": 3.721293969482759,
+        "r2": -3002.418519584235
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.09995335968367437,
+        "mae_t_ha": 0.09167997999999997,
+        "r2": -1.1660978175702668
+      }
+    },
+    "India": {
+      "selected_model": {
+        "rmse_t_ha": 0.0782895584186244,
+        "mae_t_ha": 0.06365409518230898,
+        "r2": -2.758853643235221
+      },
+      "training_mean": {
+        "rmse_t_ha": 1.4116315527530139,
+        "mae_t_ha": 1.4110538694827586,
+        "r2": -1221.0541308720447
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.05888387939025422,
+        "mae_t_ha": 0.04919986000000014,
+        "r2": -1.1263784297770356
+      }
+    },
+    "Nepal": {
+      "selected_model": {
+        "rmse_t_ha": 0.11190461346277435,
+        "mae_t_ha": 0.09615207366790815,
+        "r2": -7.390634379261359
+      },
+      "training_mean": {
+        "rmse_t_ha": 0.9091949964415215,
+        "mae_t_ha": 0.9083738694827586,
+        "r2": -552.8764351206592
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.11629221139893242,
+        "mae_t_ha": 0.07513978000000003,
+        "r2": -8.061499534446535
+      }
+    },
+    "Pakistan": {
+      "selected_model": {
+        "rmse_t_ha": 0.09374746174141277,
+        "mae_t_ha": 0.0814824664705566,
+        "r2": 0.5781586758397159
+      },
+      "training_mean": {
+        "rmse_t_ha": 0.940397075388713,
+        "mae_t_ha": 0.9292538894827587,
+        "r2": -41.44754970512275
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.13258562620438913,
+        "mae_t_ha": 0.12288006000000004,
+        "r2": 0.1562321485826873
+      }
+    }
+  },
+  "by_year": {
+    "2020": {
+      "selected_model": {
+        "rmse_t_ha": 0.12038609559992518,
+        "mae_t_ha": 0.10285644447102546,
+        "r2": 0.9871840195667453
+      },
+      "training_mean": {
+        "rmse_t_ha": 1.8735825135795698,
+        "mae_t_ha": 1.5425538294827585,
+        "r2": -2.104165197562756
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.1288284104382104,
+        "mae_t_ha": 0.10523996000000002,
+        "r2": 0.9853235008703886
+      }
+    },
+    "2021": {
+      "selected_model": {
+        "rmse_t_ha": 0.09430027327627578,
+        "mae_t_ha": 0.08189778484769113,
+        "r2": 0.992119523977349
+      },
+      "training_mean": {
+        "rmse_t_ha": 1.9365474260795768,
+        "mae_t_ha": 1.6191939294827589,
+        "r2": -2.323401595650514
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.12499497517922073,
+        "mae_t_ha": 0.11544001999999995,
+        "r2": 0.9861544038895489
+      }
+    },
+    "2022": {
+      "selected_model": {
+        "rmse_t_ha": 0.088972231263275,
+        "mae_t_ha": 0.07899666123809217,
+        "r2": 0.9932149323905276
+      },
+      "training_mean": {
+        "rmse_t_ha": 1.9689357659648914,
+        "mae_t_ha": 1.6462138094827587,
+        "r2": -2.3228314443343834
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.07832708686049811,
+        "mae_t_ha": 0.05765984000000017,
+        "r2": 0.9947414117750379
+      }
+    },
+    "2023": {
+      "selected_model": {
+        "rmse_t_ha": 0.07001436853543051,
+        "mae_t_ha": 0.05867876515279091,
+        "r2": 0.9952762479025946
+      },
+      "training_mean": {
+        "rmse_t_ha": 1.9645639868753988,
+        "mae_t_ha": 1.6798139094827587,
+        "r2": -2.7191620564169696
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.09721611570136918,
+        "mae_t_ha": 0.0699599000000001,
+        "r2": 0.990892707717128
+      }
+    },
+    "2024": {
+      "selected_model": {
+        "rmse_t_ha": 0.13122992624350957,
+        "mae_t_ha": 0.11242969033420822,
+        "r2": 0.9844326692985026
+      },
+      "training_mean": {
+        "rmse_t_ha": 2.0832060860487154,
+        "mae_t_ha": 1.7981940494827586,
+        "r2": -2.9229507259994403
+      },
+      "previous_year": {
+        "rmse_t_ha": 0.15544155039123211,
+        "mae_t_ha": 0.12722001999999993,
+        "r2": 0.9781584919739749
+      }
+    }
+  },
+  "predictions": [
+    {
+      "country": "Bangladesh",
+      "year": 2020,
+      "yield_t_ha": 3.0970001,
+      "previous_season_t_ha": 3.078,
+      "predicted": 3.1409076176348045,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "China",
+      "year": 2020,
+      "yield_t_ha": 5.7421002,
+      "previous_season_t_ha": 5.6298,
+      "predicted": 5.626739420510104,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "India",
+      "year": 2020,
+      "yield_t_ha": 3.4398003,
+      "previous_season_t_ha": 3.5334,
+      "predicted": 3.5845303737899075,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Nepal",
+      "year": 2020,
+      "yield_t_ha": 3.0887,
+      "previous_season_t_ha": 2.8490002,
+      "predicted": 2.899380769820512,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Pakistan",
+      "year": 2020,
+      "yield_t_ha": 2.8675,
+      "previous_season_t_ha": 2.8059,
+      "predicted": 2.888464621261031,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Bangladesh",
+      "year": 2021,
+      "yield_t_ha": 3.2996004,
+      "previous_season_t_ha": 3.0970001,
+      "predicted": 3.16264164596783,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "China",
+      "year": 2021,
+      "yield_t_ha": 5.8106003,
+      "previous_season_t_ha": 5.7421002,
+      "predicted": 5.734046765036624,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "India",
+      "year": 2021,
+      "yield_t_ha": 3.5208,
+      "previous_season_t_ha": 3.4398003,
+      "predicted": 3.502989718722548,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Nepal",
+      "year": 2021,
+      "yield_t_ha": 2.9917002,
+      "previous_season_t_ha": 3.0887,
+      "predicted": 3.123536930733346,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Pakistan",
+      "year": 2021,
+      "yield_t_ha": 2.9956002,
+      "previous_season_t_ha": 2.8675,
+      "predicted": 2.949270576767889,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Bangladesh",
+      "year": 2022,
+      "yield_t_ha": 3.45,
+      "previous_season_t_ha": 3.2996004,
+      "predicted": 3.3527707560616347,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "China",
+      "year": 2022,
+      "yield_t_ha": 5.8554,
+      "previous_season_t_ha": 5.8106003,
+      "predicted": 5.801181378702119,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "India",
+      "year": 2022,
+      "yield_t_ha": 3.5373,
+      "previous_season_t_ha": 3.5208,
+      "predicted": 3.581588759790503,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Nepal",
+      "year": 2022,
+      "yield_t_ha": 2.9911003,
+      "previous_season_t_ha": 2.9917002,
+      "predicted": 3.0388777599045946,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Pakistan",
+      "year": 2022,
+      "yield_t_ha": 2.9196002,
+      "previous_season_t_ha": 2.9956002,
+      "predicted": 3.0710694212591165,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Bangladesh",
+      "year": 2023,
+      "yield_t_ha": 3.4946003,
+      "previous_season_t_ha": 3.45,
+      "predicted": 3.4950222432309,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "China",
+      "year": 2023,
+      "yield_t_ha": 5.7811003,
+      "previous_season_t_ha": 5.8554,
+      "predicted": 5.846578375547137,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "India",
+      "year": 2023,
+      "yield_t_ha": 3.5207002,
+      "previous_season_t_ha": 3.5373,
+      "predicted": 3.6010297375499993,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Nepal",
+      "year": 2023,
+      "yield_t_ha": 3.0074,
+      "previous_season_t_ha": 2.9911003,
+      "predicted": 3.0426349908130463,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Pakistan",
+      "year": 2023,
+      "yield_t_ha": 3.1176002,
+      "previous_season_t_ha": 2.9196002,
+      "predicted": 3.005670921377128,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Bangladesh",
+      "year": 2024,
+      "yield_t_ha": 3.7611003,
+      "previous_season_t_ha": 3.4946003,
+      "predicted": 3.540236353677629,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "China",
+      "year": 2024,
+      "yield_t_ha": 5.9396005,
+      "previous_season_t_ha": 5.7811003,
+      "predicted": 5.782739362841731,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "India",
+      "year": 2024,
+      "yield_t_ha": 3.5590003,
+      "previous_season_t_ha": 3.5207002,
+      "predicted": 3.5901121235036833,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Nepal",
+      "year": 2024,
+      "yield_t_ha": 2.9853003,
+      "previous_season_t_ha": 3.0074,
+      "predicted": 3.061892256709066,
+      "training_mean": 2.1044662905172413
+    },
+    {
+      "country": "Pakistan",
+      "year": 2024,
+      "yield_t_ha": 3.2683003,
+      "previous_season_t_ha": 3.1176002,
+      "predicted": 3.1915807120223474,
+      "training_mean": 2.1044662905172413
+    }
+  ],
+  "provenance": {
+    "retrieved_at_utc": "2026-10-06T03:44:44.487878+00:00",
+    "source_url": "https://ourworldindata.org/grapher/wheat-yields",
+    "source_csv_url": "https://ourworldindata.org/grapher/wheat-yields.csv?tab=table",
+    "source_metadata_url": "https://ourworldindata.org/grapher/wheat-yields.metadata.json?tab=table",
+    "source_csv_sha256": "511cca58ee7e657e38f9880106ca74f3c352d953b9ef813cc41874e04173cb68",
+    "snapshot_sha256": "324647d9f391c816700c6c5bf08089100439cd5e90d2d319bfc65ecffd1921c7",
+    "countries": [
+      "Bangladesh",
+      "China",
+      "India",
+      "Nepal",
+      "Pakistan"
+    ],
+    "years": [
+      1961,
+      2024
+    ],
+    "rows": 320,
+    "crop": "Wheat",
+    "unit": "tonnes per hectare",
+    "transformation": "Filter five countries and 1961-2024; rename columns; add country-specific previous-year yield; do not round source values.",
+    "reuse": "Credit FAO and Our World in Data. Third-party data remain subject to original provider terms; see source page. Do not relabel as synthetic or field measurements.",
+    "source_metadata": {
+      "chart": {
+        "title": "Wheat yields",
+        "subtitle": "Yields are measured in tonnes per hectare.",
+        "citation": "Food and Agriculture Organization of the United Nations (2025) and other sources",
+        "originalChartUrl": "https://ourworldindata.org/grapher/wheat-yields?tab=table",
+        "selection": [
+          "Norway",
+          "Denmark",
+          "Hungary",
+          "Italy",
+          "Belgium",
+          "Netherlands",
+          "Greece",
+          "Spain",
+          "France",
+          "United Kingdom",
+          "Germany",
+          "Bulgaria",
+          "Russia",
+          "Romania",
+          "Austria"
+        ]
+      },
+      "columns": {
+        "Wheat yield": {
+          "titleShort": "Wheat yield",
+          "titleLong": "Wheat yield",
+          "descriptionShort": "Harvested production per unit of harvested area for wheat.",
+          "descriptionKey": "- In most of the cases yield data are not recorded but obtained by dividing the production data by the data on area harvested.\n- Data on yields of permanent crops are not as reliable as those for temporary crops.",
+          "shortUnit": "t/ha",
+          "unit": "tonnes per hectare",
+          "timespan": "1275-2024",
+          "type": "Numeric",
+          "owidVariableId": 1206074,
+          "shortName": "wheat_yield",
+          "lastUpdated": "2026-03-02",
+          "nextUpdate": "2027-03-02",
+          "citationShort": "Food and Agriculture Organization of the United Nations (2025) and other sources – with major processing by Our World in Data",
+          "citationLong": "Food and Agriculture Organization of the United Nations (2025); Broadberry et al. (2015); Brassley (2000); Bayliss-Smith & Wanmali (1984) – with major processing by Our World in Data. “Wheat yield” [dataset]. Food and Agriculture Organization of the United Nations, “Production: Crops and livestock products”; Broadberry et al., “Long-term crop yields in UK”; Brassley, “Long-term crop yields in UK”; Bayliss-Smith & Wanmali, “Understanding Green Revolutions” [original data].",
+          "fullMetadata": "https://api.ourworldindata.org/v1/indicators/1206074.metadata.json"
+        }
+      },
+      "dateDownloaded": "2026-10-06",
+      "activeFilters": {
+        "tab": "table"
+      }
+    }
+  },
+  "environment": {
+    "pandas": "3.0.1",
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.3"
+  }
+}

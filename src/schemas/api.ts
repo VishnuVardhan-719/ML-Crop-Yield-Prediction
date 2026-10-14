@@ -11,6 +11,7 @@ import type { ColumnDescriptor, DatasetSummaryData, ExplanationResponse, Languag
  */
 
 const scalarSchema: z.ZodType<Scalar> = z.union([z.string(), z.number(), z.boolean(), z.null()])
+const optionalUnitSchema = z.string().nullish().transform((unit) => unit ?? undefined)
 
 const qualityStatusSchema = z.enum(['good', 'warning', 'review'])
 
@@ -26,7 +27,7 @@ export const columnDescriptorSchema: z.ZodType<ColumnDescriptor> = z.object({
   label: z.string(),
   dataType: z.enum(['number', 'integer', 'category', 'text', 'boolean', 'date', 'unknown']),
   nullable: z.boolean(),
-  unit: z.string().optional(),
+  unit: optionalUnitSchema,
   unitInferred: z.boolean().optional(),
   allowedValues: z.array(scalarSchema).optional(),
   eligibleAsTarget: z.boolean(),
@@ -54,7 +55,7 @@ export const predictionResponseSchema: z.ZodType<PredictionResponse> = z.object(
   predictionId: z.string().min(1),
   targetColumnId: z.string().min(1),
   value: z.number(),
-  unit: z.string().optional(),
+  unit: optionalUnitSchema,
   unitInferred: z.boolean().optional(),
   model: z.enum(['ridge', 'lasso', 'elastic-net', 'random-forest']),
   interval: predictionIntervalSchema.optional(),
@@ -183,7 +184,8 @@ export const analysisReportSchema: z.ZodType<AnalysisReport> = z.object({
   prediction: z.object({
     label: z.string(),
     value: z.number(),
-    unit: z.string().optional(),
+    inputRecord: z.record(z.string(), scalarSchema).optional(),
+    unit: optionalUnitSchema,
     unitInferred: z.boolean().optional(),
     interval: predictionIntervalSchema.nullable(),
     evidenceShown: z.number(),

@@ -15,7 +15,7 @@ export function ExplanationPanel({ status, requested, text, message, source, lan
   return (
     <div className="explanation-panel" aria-live="polite">
       <div className="explanation-meta">
-        <span className="status-tag">AI explanation</span>
+        <span className="status-tag">Model summary</span>
         {source === 'demo' && <span className="status-tag demo-tag">Demo explanation</span>}
       </div>
       {status === 'loading' && <div className="text-skeleton"><i /><i /><i /></div>}

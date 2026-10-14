@@ -15,6 +15,15 @@ describe('API schemas against real backend output', () => {
     expect(result.success).toBe(true)
   })
 
+  it('preserves upload-derived typical inputs through report parsing', () => {
+    const inputRecord = { rainfall: 820.5, soil: 'loam', irrigated: true, missing: null }
+    const report = analysisReportSchema.parse({
+      ...demoAnalysisReport,
+      prediction: { ...demoAnalysisReport.prediction, inputRecord },
+    })
+    expect(report.prediction.inputRecord).toEqual(inputRecord)
+  })
+
   it('accepts a dataset summary in the shape the API returns', () => {
     const result = datasetSummarySchema.safeParse({
       datasetId: 'data-1',
@@ -59,5 +68,19 @@ describe('API schemas against real backend output', () => {
 
     expect(result.success).toBe(false)
     expect(result.error?.issues[0]?.path).toEqual(['value'])
+  })
+
+  it('normalizes unknown units returned as null by the backend', () => {
+    const report = analysisReportSchema.parse({
+      ...demoAnalysisReport,
+      prediction: { ...demoAnalysisReport.prediction, unit: null, unitInferred: false },
+    })
+    const prediction = predictionResponseSchema.parse({
+      predictionId: 'production-1', targetColumnId: 'production', value: 42,
+      model: 'ridge', unit: null, unitInferred: false,
+    })
+
+    expect(report.prediction.unit).toBeUndefined()
+    expect(prediction.unit).toBeUndefined()
   })
 })

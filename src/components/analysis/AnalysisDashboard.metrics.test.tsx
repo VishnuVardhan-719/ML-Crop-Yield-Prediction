@@ -66,12 +66,12 @@ describe('AnalysisDashboard metric rendering', () => {
   it('discloses how much of the holdout it is showing', () => {
     const report: AnalysisReport = {
       ...demoAnalysisReport,
-      prediction: { ...demoAnalysisReport.prediction, evidenceShown: 12, evidenceTotal: 70 },
+      prediction: { ...demoAnalysisReport.prediction, evidenceShown: 250, evidenceTotal: 4630 },
     }
 
     render(<AnalysisDashboard report={report} />)
 
-    expect(screen.getByText(/Showing 12 of 70, evenly sampled across the holdout/)).toBeTruthy()
+    expect(screen.getByText('The holdout contains 4,630 rows. The API returned an evenly spaced sample of 250. CSV export includes all returned comparisons.')).toBeTruthy()
   })
 
   it('names the attribution method that actually produced the insights', () => {

@@ -14,8 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .analysis import (
-    MODEL_DEFINITIONS,
-    VALIDATION_RANDOM,
     DatasetRecord,
     build_input_row,
     build_report,
@@ -151,11 +149,8 @@ async def inspect_dataset(file: UploadFile):
 def prediction_interval(
     record: DatasetRecord, pipeline, target: str, features: list[str], model: str, value: float, strategy: str = "random"
 ) -> dict[str, Any]:
-    """Return an RMSE-based error band, preferring the validation strategy the report used."""
+    """Return an RMSE-based error band using only the requested validation strategy."""
     cross_validated_rmse = record.cv_rmse.get((target, tuple(features), model, strategy))
-    if cross_validated_rmse is None:
-        # The report may have been scored under another strategy, or a prediction may arrive first.
-        cross_validated_rmse = record.cv_rmse.get((target, tuple(features), model, "random"))
     if cross_validated_rmse is not None:
         half_width = 1.96 * cross_validated_rmse
         method = f"RMSE-based error band: estimate ± 1.96 × this model's cross-validated RMSE ({json_number(cross_validated_rmse)}). This is not a calibrated prediction interval."
@@ -185,7 +180,7 @@ def selected_kind(record: DatasetRecord, target: str, features: list[str], strat
     key = (target, tuple(features), strategy)
     if key not in record.selected:
         fit_models(record, target, features, strategy)
-    return record.selected.get(key) or record.selected.get((target, tuple(features), VALIDATION_RANDOM)) or MODEL_DEFINITIONS[0][0]
+    return record.selected[key]
 
 
 @app.post("/predictions")
@@ -194,9 +189,10 @@ def predict(request: PredictionRequest):
     if request.targetColumnId not in candidate_targets(record.frame):
         raise fail("Choose one of the numeric target candidates returned for this dataset.")
     features = usable_features(record.frame, request.targetColumnId, request.featureColumnIds)
-    kind = request.model or selected_kind(record, request.targetColumnId, features, request.validation)
-    pipeline = fitted_model(record, request.targetColumnId, features, kind)
     row = build_input_row(record.frame, features, request.inputRecord)
+    selected = selected_kind(record, request.targetColumnId, features, request.validation)
+    kind = request.model or selected
+    pipeline = fitted_model(record, request.targetColumnId, features, kind)
     value = float(pipeline.predict(row)[0])
     if not np.isfinite(value):
         raise fail("CropCast could not produce a finite prediction for these values. Check the submitted record.")

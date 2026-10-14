@@ -74,6 +74,25 @@ def test_a_feature_pair_that_defines_the_target_is_excluded():
     assert any("production" in caveat and "area" in caveat for caveat in report["caveats"])
 
 
+def test_a_rounded_feature_pair_that_defines_the_target_is_excluded():
+    """Stored yield may be rounded even though production / area defines it exactly."""
+    rng = np.random.default_rng(7)
+    area = rng.uniform(100, 100_000, 200)
+    production = np.round(area * rng.uniform(0.1, 20, 200))
+    frame = pd.DataFrame(
+        {
+            "production": production,
+            "area": area,
+            "yield": np.round(production / area, 2),
+            "rainfall": rng.uniform(300, 2_000, 200),
+        }
+    )
+
+    definitions = analysis.defining_features(frame, "yield", analysis.candidate_features(frame, "yield"))
+
+    assert definitions == [("production", "area", "production / area")]
+
+
 def test_excluding_the_defining_pair_removes_the_inflation():
     """Once `production` and `area` are gone, only noise remains, so no model can look skilful."""
     report = report_for(ratio_frame(), "yield")

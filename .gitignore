@@ -29,3 +29,13 @@ backend/.pip-install*.log
 *.njsproj
 *.sln
 *.sw?
+
+# Local tools, agent state and environment configs
+.agents/
+.claude/
+.commandcode/
+.playwright-mcp/
+.mcp.json
+.revival-audit-final.json
+skills-lock.json
+WhatsApp Image*

@@ -1,156 +1,510 @@
-# CropCast
+# CropCast — Crop Yield Prediction App
 
-CropCast is a local, end-to-end crop-yield analysis app. Upload a field dataset and the FastAPI backend profiles it, identifies or asks for a numeric target, compares regression models against a mean baseline, and returns an evidence-based report to the React frontend.
+> Upload a supported agricultural table, compare regression models, and predict individual records locally. Prediction quality depends on the dataset and validation strategy.
 
-## What it does
+**Preparing to present?** See `PRESENTATION_README.md` in the project root for a beginner-friendly explanation of all nine report sections, formulas, algorithms, low/high values, demo scripts, viva answers and a prompt for ChatGPT coaching.
 
-- Accepts **CSV**, **XLSX**, and ZIP archives containing **exactly one CSV**.
-- Enforces a **10 MB** upload limit in the browser and again on the server.
-- Detects crop-output targets with names such as `yield` and `production`.
-- Asks you to pick the target whenever it cannot identify one safely, instead of guessing a column.
-- Compares **Ridge, Lasso, Elastic Net, and Random Forest** using k-fold cross-validation, with a 75/25 holdout split reported alongside.
-- Lets you choose what the scores actually measure: a **random split**, a **grouped split** that holds out whole entities, or a **temporal split** that trains on earlier rows and tests on later ones. Each option carries its own caveat text, and an option the dataset cannot support stays visible and disabled with the reason.
-- Adds a **mean baseline** (`DummyRegressor`) as a reference row, and reports whether anything actually beat it. The selected model is the one with the **lowest cross-validated RMSE**.
-- Reports every metric as `null` rather than `0` when a statistic is undefined. A model with a missing metric can never be selected.
-- Imputes missing values and applies unknown-safe categorical encoding inside each model pipeline.
-- Excludes identifier and date columns from model features, and flags interquartile-range outliers as review items.
-- Detects and discloses three ways a score can be misleading: **target redundancy** (a feature that restates the target), **train/test entity overlap** (rows sharing a field or plot across the split), and a **lookalike temporal column** that would make a random split look like a forecast test. Overlap under the strategy actually used is stated once rather than repeated across validation and caveats.
-- Validates **every backend response** against a hand-written **zod** schema at the network boundary, so a drifted field name or type fails with the offending path instead of surfacing as `undefined` deep in the UI.
-- Ranks drivers with **standardized coefficients** for linear models and **training-set permutation importance** for tree ensembles, and labels which method produced the numbers.
-- Returns an **RMSE-based error band** with the report estimate and with every field prediction. It is disclosed as a heuristic range, not a calibrated prediction interval.
-- Flags predictions that fall outside the observed target range as extrapolation.
-- Provides interactive API docs at `http://localhost:8000/docs`.
+---
 
-## Requirements
+## Table of Contents
 
-- Node.js 22+ and npm
-- Python 3.14+ (or a Python version supported by the pinned backend packages)
+1. [Project Overview](#1-project-overview)
+2. [Architecture](#2-architecture)
+3. [Tech Stack](#3-tech-stack)
+4. [Folder Structure](#4-folder-structure)
+5. [ML Pipeline (Backend)](#5-ml-pipeline-backend)
+6. [API Reference](#6-api-reference)
+7. [Frontend Pages & Components](#7-frontend-pages--components)
+8. [Validation Strategies](#8-validation-strategies)
+9. [Setup & Running Locally](#9-setup--running-locally)
+10. [Scripts & Tooling](#10-scripts--tooling)
+11. [Testing](#11-testing)
+12. [Design Decisions & Tradeoffs](#12-design-decisions--tradeoffs)
 
-## Run locally
+---
 
-### Install dependencies
+## 1. Project Overview
+
+**CropCast** is a full-stack local web application for crop yield analysis and prediction. The user uploads a CSV or Excel dataset (or tries the built-in demo), and the app:
+
+- Auto-detects the numeric target column (yield, production, output, harvest)
+- Compares **4 ML models**: Ridge, Lasso, Elastic Net, Random Forest
+- Compares them against a mean-baseline (DummyRegressor)
+- Selects the best model by lowest cross-validated RMSE
+- Returns a full analysis report: metrics (R2, MAE, RMSE), feature importance/coefficients, validation notes, and dataset health warnings
+- Lets the user fill in custom field values and get a **prediction with a heuristic RMSE-based error band**, not a calibrated confidence interval
+- Provides a **template-based model summary** in English, Hindi, or Telugu, not a causal explanation of an individual field
+
+Everything runs **locally** — no cloud ML, no fabricated numbers in the browser.
+
+### Delivery scope and remaining work
+
+This is a local course-project application for tabular regression, not a validated agronomic advisory service. The bundled sample is synthetic; it demonstrates the workflow rather than proving accuracy on real farms.
+
+For a project submission, demonstrate a supported upload, target selection when ambiguous, model/baseline comparison, a field prediction, a model summary and the validation caveats. Use ISO dates (`YYYY-MM-DD`) or numeric years for temporal evaluation; ambiguous regional date strings can be interpreted incorrectly. Temporal validation needs at least three complete, distinct labelled periods. The prediction form stays tied to the analyzed target; upload again to analyze a different target.
+
+### Presentation walkthrough
+
+1. Upload a CSV, or download and upload the bundled synthetic sample. **Run demo analysis** only replays a saved report; it does not train a new model or accept manual predictions.
+2. Compare models and the mean baseline. Explain that RMSE and MAE are errors in the target's units; R² is not an accuracy percentage. The lowest cross-validated RMSE selects the model, even if it does not improve enough on the baseline.
+3. Choose **Predict a new record**. The target and feature set stay fixed to the report. Enter known inputs, or choose **Fill typical inputs** to use upload-derived numeric medians and categorical modes. The target is the answer being estimated, not an input to supply.
+4. Show the returned value, units, model and RMSE-based error band. The model is fitted on usable labelled rows from the upload. The estimate is for one observation, not the dataset average. The band has no calibrated 95% coverage guarantee.
+5. Review **Model testing evidence**. “Test record 1…” labels are display positions for historical holdout comparisons, not new generated records or source row IDs. The preview starts with 10; expansion and CSV export include all returned comparisons (at most 250). The holdout overlaps model-selection CV, so it is not an untouched independent final test.
+6. If switching validation, let the re-score finish before predicting again. Entered inputs stay, but previous predictions and summaries are cleared so they cannot be mistaken for the new model's output.
+
+Before claiming real-world forecasting accuracy:
+
+- Obtain a documented, real dataset with crop, location, season, target units and collection provenance. Use only inputs available at the time the forecast will be made.
+- Reserve an untouched future season or location for final evaluation. The current model-selection CV and displayed holdout use overlapping data; the holdout is not an independent final test of the selected model.
+- Review automatic target-definition screening with domain knowledge. It examines the full uploaded target column, so the entire evaluation must not be described as strictly fold-isolated or leakage-free.
+- Measure errors separately by crop and geography, compare a meaningful agronomic baseline, and verify whether the selected model improves on it. A runnable pipeline cannot guarantee useful predictions.
+- Calibrate uncertainty if coverage claims are needed. Current error bands are heuristic; feature importance and template summaries are associations, not causal or record-specific explanations.
+
+Before public or multi-user deployment, add authentication and dataset ownership, resource/concurrency limits, persistent storage or explicit session handling, reproducible model/data artifacts and operational monitoring. The current in-memory store expires after one hour and disappears on restart; use one backend worker. Do not expose this unauthenticated local API to the internet.
+
+The CSV download contains the displayed holdout sample, not a batch prediction for every uploaded row. Batch inference and complete dataset exports are not implemented.
+
+### Real-data benchmark
+
+A separate reproducible benchmark uses national annual wheat yields from FAO, processed by Our World in Data, for Bangladesh, China, India, Nepal and Pakistan (1961-2024). Source units are tonnes per hectare. The snapshot, attribution and checksum are bundled; no account or network access is needed to rerun it.
+
+From `C:\2ND YEAR ODD SEM\ML\crop-yield-app`, run:
 
 ```powershell
-npm install
+npm run benchmark:real
+```
+
+It selects among the existing four models using chronological CV on 1962-2019, then freezes the chosen model before evaluating 2020-2024. Features are predefined: country, year and previous-year yield. The previous-year feature allows rolling one-year-ahead evaluation; this is not a five-year-ahead forecast. Mean and previous-year baselines, per-country/year errors and all test predictions are included.
+
+Evidence: `C:\2ND YEAR ODD SEM\ML\crop-yield-app\docs\real-data-benchmark.md` and the adjacent JSON report. Uploadable data: `C:\2ND YEAR ODD SEM\ML\crop-yield-app\public\sample-datasets\real-wheat-yields.csv`. The adjacent metadata JSON records the source and dataset hash. Uploading this CSV into the app runs exploratory analysis, **not** the separately locked benchmark protocol.
+
+This adds real-data evidence, not farm-level validation. National averages hide field variation; historical revisions and publication delays are not simulated. Previous-year yields must actually be available at forecast time. No weather/soil/management observations, calibrated uncertainty or unseen-country test are supplied.
+
+---
+
+## 2. Architecture
+
+```
++----------------------------------------------------------+
+|                     Browser (React SPA)                   |
+|  Home Page  -->  Analysis Page  -->  Prediction Form      |
+|  (Vite + React 19 + React Router 7 + Tailwind CSS v4)    |
++---------------------+------------------------------------+
+                      |  HTTP (fetch / AbortController)
+                      |  JSON API
++---------------------v------------------------------------+
+|               FastAPI Backend  (Python 3.14)              |
+|                                                           |
+|   POST /dataset/analyze   --> Auto-detects target         |
+|   POST /analysis/run      --> Re-scores with a target     |
+|   POST /datasets          --> Inspects columns            |
+|   POST /predictions       --> Field-level prediction      |
+|   POST /explanations      --> Language explanation        |
+|   GET  /health                                            |
+|                                                           |
+|  In-memory bounded store (OrderedDict, TTL = 1 hour)      |
+|  All CPU-bound work runs off the event loop               |
+|  (run_in_threadpool)                                      |
++---------------------+------------------------------------+
+                      |  scikit-learn Pipelines
++---------------------v------------------------------------+
+|                  analysis.py  (ML Engine)                 |
+|                                                           |
+|  - Reads CSV / XLSX / ZIP                                 |
+|  - Cleans, imputes, encodes                               |
+|  - Fits 4 models via sklearn Pipeline                     |
+|  - Cross-validates (random / grouped / temporal)          |
+|  - Computes permutation importance (trees) or             |
+|    standardized coefficients (linear)                     |
+|  - Builds JSON report                                     |
++-----------------------------------------------------------+
+```
+
+**Key architectural choices:**
+- **No database** — datasets live in a bounded, TTL-expiring in-memory `OrderedDict` (max 16 datasets, max 200 predictions). Stateless between restarts.
+- **No browser-side ML** — all model training and scoring happens in the Python process.
+- **AbortController on the frontend** — every long analysis request can be cancelled when the user uploads a new file.
+- **Adaptive forest** — on large datasets (>5,000 rows) the Random Forest automatically drops from 300 trees to 60 trees with a capped bootstrap sample, so a large upload degrades in speed, not into a browser timeout.
+
+---
+
+## 3. Tech Stack
+
+### Frontend
+
+| Tool | Version | Role |
+|------|---------|------|
+| React | 19 | UI library |
+| React Router | 7 | Client-side routing |
+| TypeScript | 6 | Type safety |
+| Vite | 8 | Dev server & bundler |
+| Tailwind CSS | 4 | Styling |
+| Zod | 4 | API response schema validation |
+| Vitest | 5 | Unit tests |
+| @testing-library/react | 16 | Component tests |
+| oxlint | 1.8 | Linter |
+
+### Backend
+
+| Tool | Version | Role |
+|------|---------|------|
+| Python | 3.14 | Runtime |
+| FastAPI | 0.141 | REST API framework |
+| Uvicorn | 0.41 | ASGI server |
+| scikit-learn | 1.9 | ML models & pipelines |
+| pandas | 3.0 | Data loading & manipulation |
+| openpyxl | 3.1 | Excel file support |
+| python-multipart | 0.0.22 | File upload parsing |
+| httpx | 0.28 | HTTP client (used in tests) |
+| pytest | 9.0 | Backend tests |
+| ruff | (dev) | Linting & formatting |
+
+---
+
+## 4. Folder Structure
+
+```
+crop-yield-app/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py          # FastAPI app, routes, in-memory store
+│   │   └── analysis.py      # Full ML engine (~1,200 lines)
+│   ├── scripts/
+│   │   ├── generate_sample_dataset.py
+│   │   └── generate_demo_fixture.py
+│   ├── tests/               # pytest API tests
+│   └── requirements.txt
+│
+├── src/
+│   ├── App.tsx              # Router setup (/, /analysis)
+│   ├── main.tsx             # React root
+│   ├── pages/
+│   │   ├── Home.tsx         # Landing page
+│   │   └── Analysis.tsx     # Main analysis workspace
+│   ├── components/
+│   │   ├── analysis/        # AnalysisDashboard, AnalysisProgress
+│   │   ├── dataset/         # FileDropzone
+│   │   ├── prediction/      # Prediction form & results
+│   │   ├── explanation/     # Multi-language explanation card
+│   │   ├── landing/         # Hero, WorkflowOverview, ProductDetails
+│   │   ├── layout/          # Nav, footer
+│   │   └── voice/           # Voice/tone components
+│   ├── services/
+│   │   ├── analysisService.ts   # analyzeDataset, resumeAnalysis
+│   │   └── predictionService.ts # predict, explain
+│   ├── types/
+│   │   ├── analysis.ts      # AnalysisState discriminated union
+│   │   └── cropcast.ts      # ValidationStrategy, Report types
+│   ├── schemas/             # Zod schemas for API validation
+│   ├── demo/                # Static demo fixture (offline demo mode)
+│   └── styles/              # Global CSS
+│
+├── public/                  # Static assets
+├── index.html
+├── vite.config.ts
+├── tsconfig.*.json
+├── package.json
+├── pyproject.toml           # ruff config
+└── .env.example
+```
+
+---
+
+## 5. ML Pipeline (Backend)
+
+All ML logic lives in `backend/app/analysis.py`.
+
+### 5.1 Data Ingestion
+
+- Accepts: `.csv`, `.xlsx`, `.zip` (containing exactly one CSV)
+- Max upload: **10 MB**
+- Reads with `pandas` + `openpyxl`
+
+### 5.2 Feature Preprocessing (sklearn Pipeline)
+
+Each model is wrapped in a **sklearn `Pipeline`** with a `ColumnTransformer`:
+
+```
+ColumnTransformer
+├── Numeric columns  -->  SimpleImputer(median)   -->  StandardScaler
+└── Categorical cols -->  SimpleImputer(most_frequent) -->  OneHotEncoder(handle_unknown='ignore')
+```
+
+### 5.3 Models Compared
+
+| ID | Name | Algorithm | Key Hyperparams |
+|----|------|-----------|----------------|
+| `ridge` | Ridge | Ridge | alpha = 1.0 |
+| `lasso` | Lasso | Lasso | alpha = 0.05 |
+| `elastic-net` | Elastic Net | ElasticNet | alpha = 0.08, l1_ratio = 0.4 |
+| `random-forest` | Random Forest | RandomForestRegressor | n_estimators = 300, random_state = 42 |
+
+A **`DummyRegressor(strategy="mean")`** provides the baseline. A model must beat it by at least 5% of baseline error to be called informative.
+
+### 5.4 Model Selection
+
+The selected model is the one with the **lowest cross-validated RMSE** across all four candidates. Results are cached in `DatasetRecord.selected` so re-predictions don't re-train.
+
+### 5.5 Feature Importance / Coefficients
+
+- **Linear models** → Standardized coefficients (directional and comparable in size)
+- **Random Forest** → Permutation importance (shuffles each column on the fitted model, measures RMSE rise; on large datasets uses a subsample of ≤3,000 rows with 5 repeats, disclosed in the report)
+
+### 5.6 Prediction Interval
+
+RMSE-based error band:
+
+```
+estimate ± 1.96 × cross-validated RMSE
+```
+
+If cross-validated RMSE is unavailable, falls back to residual standard error on training data (in-sample, disclosed to the user).
+
+### 5.7 Dataset Health Warnings
+
+The engine detects and discloses:
+
+- **Target-redundancy risk** — a feature correlated >= 0.95 with the target (flagged, not removed)
+- **Group leakage** — the same entity appears on both sides of a random split
+- **Temporal leakage** — a date/year column exists and random split is used
+- **Unseen categories** — a categorical value in the prediction form was never in training data
+- **Extrapolation** — a predicted value is outside the observed target range
+
+---
+
+## 6. API Reference
+
+Base URL (local): `http://localhost:8000`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/dataset/analyze` | Upload file, auto-detect target, return full report |
+| `POST` | `/analysis/run` | Re-run analysis with an explicit target column |
+| `POST` | `/datasets` | Inspect a file's columns (no training) |
+| `POST` | `/predictions` | Make a field-level prediction |
+| `POST` | `/explanations` | Get a plain-language explanation (en / hi / te) |
+
+### POST `/dataset/analyze`
+
+- Body: `multipart/form-data` with `file` field (CSV, XLSX, ZIP)
+- Returns: full analysis report, OR `{ "status": "needs-target", "candidates": [...] }` if multiple numeric columns are detected
+
+### POST `/predictions`
+
+```json
+{
+  "datasetId": "...",
+  "targetColumnId": "yield_t_ha",
+  "featureColumnIds": ["rainfall_mm", "temperature", "crop_type"],
+  "model": null,
+  "inputRecord": {
+    "rainfall_mm": 850,
+    "temperature": 28,
+    "crop_type": "Rice"
+  },
+  "validation": "random"
+}
+```
+
+Response:
+
+```json
+{
+  "predictionId": "...",
+  "value": 3.84,
+  "model": "random-forest",
+  "unit": "t/ha",
+  "interval": { "lower": 2.1, "upper": 5.58, "halfWidth": 1.74, "inSample": false },
+  "notices": []
+}
+```
+
+### POST `/explanations`
+
+```json
+{ "predictionId": "...", "language": "hi" }
+```
+
+Response: `{ "text": "..." }` — a paragraph-length explanation in the requested language.
+
+---
+
+## 7. Frontend Pages & Components
+
+### Pages
+
+| Route | Component | Purpose |
+|-------|-----------|---------|
+| `/` | `Home` | Landing page — hero, workflow overview, product details |
+| `/analysis` | `Analysis` | Upload, analysis, and prediction workspace |
+| `*` | `NotFound` | 404 fallback |
+
+### Analysis Page State Machine
+
+The `Analysis` page uses a **discriminated union state** (`AnalysisState`):
+
+```
+idle
+  --> processing
+        --> complete
+        --> needs-target  (multiple numeric columns detected)
+              --> processing --> complete
+        --> error
+```
+
+The user can also change the **validation strategy** on a completed report to re-score all models under a new split strategy, without clearing the current report from view.
+
+### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `FileDropzone` | Drag-and-drop + click-to-upload CSV/XLSX |
+| `AnalysisProgress` | Loading indicator while analysis runs |
+| `AnalysisDashboard` | Full report: metrics, charts, feature importance |
+| Prediction form | Dynamic form built from dataset column types |
+| Explanation card | Plain-language explanation of the prediction |
+
+### Demo Mode
+
+A static pre-computed fixture in `src/demo/` lets users explore the report without uploading a real file. It cannot re-train models or predict a new field. Upload the downloadable sample dataset with the API running to test the complete workflow.
+
+---
+
+## 8. Validation Strategies
+
+| Strategy | What it tests | When to use |
+|----------|--------------|-------------|
+| `random` | Rows split at random 75/25 | Default; fastest |
+| `grouped` | Split by entity (crop/district) — no entity on both sides | Estimating transfer to an unseen entity |
+| `temporal` | Later complete periods held out, with forward-chaining validation | Estimating earlier-to-later extrapolation |
+
+Grouped and temporal scores may be worse than random-split scores because they test a different kind of generalization. Choose the strategy that matches the intended use; do not choose it just to maximize the score.
+
+---
+
+## 9. Setup & Running Locally
+
+### Prerequisites
+
+- Node.js 20.19+ or 22.12+ (CI uses Node 22)
+- Python 3.14 (the configured lint target and CI version)
+
+### 1. Clone & Install
+
+```bash
+git clone <repo-url>
+cd crop-yield-app
+
+# Python virtualenv
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
-Copy-Item .env.example .env
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+
+pip install -r backend/requirements-dev.txt
+
+# Node dependencies
+npm install
 ```
 
-`backend/requirements.txt` covers running the service. `backend/requirements-dev.txt` adds `ruff` and `ty` for the lint, format, and type gates.
+### 2. Environment
 
-The copied `.env` file contains:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000
+```bash
+cp .env.example .env
+# No secrets needed for local dev
 ```
 
-The backend accepts an optional `CROPCAST_ALLOWED_ORIGINS` environment variable (comma-separated). It defaults to the local Vite dev and preview origins on ports `5173` and `4173`.
+### 3. Run (two terminals)
 
-### Start the app
+**Terminal 1 — API:**
 
-Use two terminals:
-
-```powershell
-# terminal 1
+```bash
 npm run dev:api
+# FastAPI on http://localhost:8000
+```
 
-# terminal 2
+**Terminal 2 — Frontend:**
+
+```bash
 npm run dev
+# Vite on http://localhost:5173
 ```
 
-Open the Vite URL, normally `http://localhost:5173`.
+Open **http://localhost:5173** in your browser.
 
-## API
+---
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/health` | API health check |
-| `POST` | `/dataset/analyze` | Upload and analyze data; returns a report or target candidates |
-| `POST` | `/analysis/run` | Continue after selecting an ambiguous target, optionally under a chosen validation strategy |
-| `POST` | `/datasets` | Inspect a dataset for the prediction workbench contract |
-| `POST` | `/predictions` | Automatically select the lowest-CV-RMSE candidate for the requested fields and predict one record |
-| `POST` | `/explanations` | Return a summary for a stored prediction |
+## 10. Scripts & Tooling
 
-Every metric in a report may be `null`: the API reports an undefined statistic as missing rather than as `0`. The interface renders those as `—`.
+| npm script | What it does |
+|-----------|-------------|
+| `npm run dev` | Vite dev server (frontend) |
+| `npm run dev:api` | Uvicorn dev server (backend, hot-reload) |
+| `npm run build` | TypeScript check + Vite production build |
+| `npm run typecheck` | tsc --noEmit (frontend) |
+| `npm run typecheck:api` | ty check backend |
+| `npm run lint` | oxlint (frontend) |
+| `npm run lint:api` | ruff check (backend) |
+| `npm run format:api` | ruff format (backend) |
+| `npm run test` | vitest run (frontend unit tests) |
+| `npm run test:api` | pytest (backend tests) |
+| `npm run check` | Full gate: lint + typecheck + tests (both stacks) |
+| `npm run generate:sample` | Generate a sample CSV dataset |
+| `npm run generate:demo` | Regenerate the static demo fixture |
+| `npm run benchmark:real` | Offline real-data benchmark with held-out future years |
 
-`POST /analysis/run` and `POST /predictions` both accept an optional `validation` of `random`, `grouped`, or `temporal`, defaulting to `random`. A strategy the dataset cannot support is rejected with a `400` naming the missing entity or date column. A field prediction's error band is taken from the split the report was actually scored under, falling back to the random split only if that strategy was never scored.
+---
 
-When `model` is omitted, field predictions compare all four candidates for the requested feature set and reuse the one with the lowest raw cross-validated RMSE. An explicit `model` remains accepted for backward compatibility. The API rejects unknown, duplicate, identifier-like, date, constant, target-defining, and otherwise ineligible feature columns before fitting anything. Submitted strings are coerced, missing values are imputed, unseen categories are handled, and `notices` report extrapolation beyond the observed target range.
+## 11. Testing
 
-## Test and build
+### Frontend
 
-```powershell
-npm run check          # frontend lint + types + tests, then backend lint + types
-npm run lint           # oxlint
-npm run typecheck      # tsc -b
-npm test               # vitest
-npm run lint:api       # ruff check
-npm run format:api     # ruff format
-npm run test:api       # pytest
-npm run build          # tsc -b && vite build
+```bash
+npm test
+# Vitest + @testing-library/react
 ```
 
-CI runs the frontend job (lint, `tsc -b`, tests, build) and the backend job (`ruff check`, `ruff format --check`, `ty check`, pytest) on every push and pull request.
+Key test files:
+- `src/App.test.tsx` — routing smoke tests
+- `src/pages/Analysis.test.tsx` — upload & state machine tests
 
-## Datasets
+### Backend
 
-Provide at least eight rows and two columns. The selected target must have at least eight numeric values. Identifier-like fields are excluded from model features. A pair that arithmetically reproduces the target, such as `Yield ≈ Production / Area`, is also excluded; analysis stops if no safe predictors remain. Useful feature columns include rainfall, temperature, soil properties, irrigation status, and fertilizer.
-
-### The bundled sample dataset
-
-`public/sample-datasets/sample-field-trials.csv` (288 rows) is synthetic and generated on purpose to exercise the app rather than flatter it:
-
-- a **saturating** fertiliser response and a **pest threshold**, which linear models genuinely cannot fit
-- a **rainfall × irrigation interaction**, so no single rainfall coefficient works for both groups
-- irreducible noise of roughly 12% of the target spread, which puts R² in a realistic 0.6–0.7 band
-- the **same 96 fields recorded over three seasons**, so a shuffled split really does contain entity overlap
-- scattered missing values, a few impossible rainfall readings, two failed plots, and one near-useless feature
-
-The result is that the four models separate meaningfully and **Random Forest wins on merit** — which is the point of comparing four models. Regenerate it with:
-
-```powershell
-npm run generate:sample
+```bash
+npm run test:api
+# pytest backend/tests/
+# Uses httpx + FastAPI TestClient for end-to-end API coverage
 ```
 
-The demo shown by **Run demo analysis** is a recorded run over that same file, so the two can never disagree. Regenerate it after changing the engine or the dataset:
+---
 
-```powershell
-npm run generate:demo
-```
+## 12. Design Decisions & Tradeoffs
 
-Aim for roughly 100+ rows for stable held-out metrics; with fewer than 20 usable target rows the report flags that its metrics are indicative only.
+### Why no database?
 
-## Limitations
+CropCast is a local analysis tool, not a multi-user SaaS. A bounded in-memory `OrderedDict` with a 1-hour TTL and a 16-dataset cap keeps the architecture zero-dependency and stateless. Upload again if the session expires.
 
-- This is a local development app, not a deployed agricultural advisory service.
-- Datasets and fitted models are held only in server memory and disappear on restart. The store is capped at 16 datasets and 200 predictions and expires entries after one hour, so a long-lived process does not grow without bound.
-- Display units are **inferred from the column name** and are labelled as inferred wherever they appear. Confirm the unit against your own data before relying on it.
-- Cross-validated metrics use every usable row, while holdout metrics come from a single split of those same rows. They are shown side by side for transparency and are not directly comparable.
-- The default validation is a **random split**, which measures interpolation between known conditions. Choose **grouped** to estimate transfer to an unseen field, or **temporal** to train on earlier rows and test on later ones. The report states which question the displayed numbers answer; the random split remains an upper bound on transfer unless you switch.
-- Hyperparameters are **fixed constants**, reported as such. There is no hyperparameter search, so a model's defaults are not tuned to your dataset.
-- Prediction intervals are **residual-based** (±1.96 × cross-validated RMSE), not calibrated coverage guarantees.
-- The **summary is template-composed** in English, Hindi, and Telugu. No language model is involved and nothing in the interface claims otherwise.
-- Results apply only to the uploaded dataset. They are not a pre-trained regional model, do not establish causation, and should not be the sole basis for farming or financial decisions.
+### Why 4 models?
 
-## Performance and how the numbers are verified
+Ridge / Lasso / Elastic Net cover the regularization spectrum for linear relationships; Random Forest handles nonlinearities. Comparing all four gives the user a transparent view of which algorithm fits their data best, rather than forcing a single black-box choice.
 
-On the bundled sample dataset (288 rows) a full analysis takes roughly **23–25 s**. Where the time goes, measured rather than guessed:
+### Why not run Random Forest with n_jobs=-1 always?
 
-- The Random Forest is ~69% of model fitting and all of the ~9 s attribution step; the three linear models together take well under a second.
-- The forest is deliberately **serial** (`n_jobs` left at its default). Parallel trees would make 5-fold cross-validation ~41% faster (15.1 s → 8.9 s), but the same forest also scores `permutation_importance`, which makes 91 small predictions — and each is ~2.4× slower when the forest predicts across threads (62 ms vs 150 ms). The two effects net out ~1 s *slower*, and parallel prediction changes floating-point summation order, so scores would stop being bit-reproducible. Both measurements are recorded next to the code in `backend/app/analysis.py`.
-- The real lever is **tree count**: `n_estimators=300` → 200 costs one thousandth of an R² point (0.6654 → 0.6659, i.e. no meaningful loss) for ~30% less total engine time. That is a modelling choice, not a defect, so it is left to the reader.
-- `permutation_importance` is likewise serial **on purpose**: `n_jobs != 1` there spawns worker *processes* (not threads) that each pickle the fitted forest, and measured 9.3 s serial vs 14.4 s with two workers.
+Benchmarked on a 19,689-row dataset: parallel tree building saves ~6s in fitting but **costs ~7s** in permutation importance (many small parallel predictions are slower than serial). Net: ~1s *slower*, and scores stop being bit-reproducible. CropCast keeps `n_jobs=1` for small datasets, and only enables parallelism on large datasets where single-tree cost is hundreds of milliseconds.
 
-Correctness is tested against **external sources of truth**, not just the report's own consistency — see `backend/tests/test_ground_truth.py`. The hand-built out-of-fold loop (which replaced `cross_val_predict`, since the latter refuses forward-chaining splits) is asserted bit-identical to sklearn's reference implementation; a noise-free linear relationship must be recovered; a target independent of its features must fail to beat the baseline; a column that restates the target must be flagged as leakage; and the engine's Ridge score on the bundled diabetes dataset must match an independently written cross-validation and the band reported in the literature.
+### Why Zod on the frontend?
 
-**Large datasets** (above 5,000 usable rows) switch the Random Forest to a reduced budget — 60 trees, a 2,500-row bootstrap cap per tree, and thread-parallel tree building — which brought a real 19,689-row state harvest dataset from *never finishing* (one 300-tree fit alone measured ~493 s) to **~2 minutes end to end**, while datasets at or below the threshold keep their exact previous budget and byte-identical scores. Permutation importance on large frames is measured on a seeded random sample of 3,000 rows with 5 repeats, and the report's insight notes disclose that sample. The reduced hyperparameters are shown in the report rather than hidden behind the small-dataset constants, and the browser request deadline (180 s) is sized to the documented large-dataset budget.
+FastAPI returns JSON; Zod validates and narrows the shape at the fetch boundary so TypeScript downstream is genuinely safe — not just type-cast.
 
-## References
+### Why no browser-side training?
 
-- [FastAPI](https://github.com/fastapi/fastapi): typed multipart APIs, OpenAPI docs, and `TestClient`.
-- [scikit-learn](https://github.com/scikit-learn/scikit-learn): tabular preprocessing, regression pipelines, `DummyRegressor` baselines, and `permutation_importance`.
-- [zod](https://zod.dev): runtime validation of backend responses against shared TypeScript types at the client boundary.
-- [Full Stack FastAPI Template](https://github.com/fastapi/full-stack-fastapi-template): larger React/FastAPI reference; its database, authentication, proxy, and deployment stack are intentionally excluded here.
+Transparency. If the model runs in Python, the user gets real cross-validated metrics. Browser-side training (TF.js etc.) would make auditing model behavior much harder and adds significant bundle weight.
+
+### Why plain-language explanations in 3 languages?
+
+Agricultural decision-makers in India are often more comfortable in Hindi or Telugu than English. The explanation endpoint is a lightweight template system — no LLM, no latency, no cost.
+
+---
+
+*Built as an ML course project — 2nd Year Odd Semester.*
